@@ -38,6 +38,7 @@ export const DEFAULTS = {
   github: {
     autoAccount: true,       // find the logged-in gh account that can see each repository
     accounts: {},            // pin by owner: { "my-org": "my-login" }
+    repos: {},               // pin by repository: { "my-org/app": "my-login" }; wins over an owner pin
   },
   agent: {
     prefer: "claude",        // programs.json key of the agent tasks start with; "" = first installed

@@ -12,6 +12,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, Input, InputState } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run, shared, setShared } from "herdr";
 import { cfg, get, setSetting, resetSettings, DEFAULTS, SETTINGS_FILE } from "./config.js";
+import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
 
 const ICON = "mods/sab-panel/icons/";
 const SECTIONS = [
@@ -34,6 +35,13 @@ const LISTS = {
     split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o && l)),
     join: (o) => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join(", "),
     placeholder: "my-org=my-login, other-org=work-login",
+    empty: {},
+  },
+  // owner/name=login pairs; the panels' account menu writes these too.
+  "github.repos": {
+    split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o.includes("/") && l)),
+    join: (o) => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join(", "),
+    placeholder: "my-org/app=my-login",
     empty: {},
   },
 };
@@ -60,10 +68,15 @@ export default class Settings extends View {
     }
     this.handle = cx.focus_handle();
     this.handle.focus();
+    this.readLogins(cx);
     cx.spawn(async (cx) => {
       try { this.agents = (await knownAgents()).filter((a) => a.installed); } catch { this.agents = []; }
       cx.notify();
     });
+  }
+
+  readLogins(cx, fresh = false) {
+    cx.spawn(async (cx) => { this.logins = await ghLogins(null, fresh); cx.notify(); });
   }
 
   // Saves one setting; saves run one after another so quick clicks don't race.
@@ -197,15 +210,34 @@ export default class Settings extends View {
   }
 
   githubPage(t, c) {
-    const known = Object.entries(shared("sab.gh.accounts") ?? {});
+    const known = Object.entries(shared(ACCOUNTS) ?? {});
+    const list = this.logins ?? [];
     return v_flex().w_full()
-      .child(this.heading(t, "Accounts"))
-      .child(this.toggle(t, "github.autoAccount", "Find the right account", "With several gh logins (gh auth status), the PR and Issues panels use the first one that can see each repository, active one first, and remember it"))
+      .child(this.heading(t, "Logged in to gh"))
+      .when(!this.logins, (el) => el.child(this.row(t, "Reading gh auth status…", null, div())))
+      .when(Boolean(this.logins) && !list.length, (el) => el.child(this.row(t, "No account", "gh isn't logged in, or isn't installed.", div())))
+      .children(list.map((l, i) => this.row(t, l.login,
+        [l.active ? "Active: what gh uses in your terminals, and the panels' first try" : "Logged in", l.host !== "github.com" ? l.host : null, l.ok ? null : "its login no longer works: add it again"].filter(Boolean).join(" · "),
+        l.active ? div().px(10).text_size(12.5).text_color(t.accent).child("Active")
+          : this.button(t, `set-gh-switch-${i}`, this.switching === l.login ? "Switching…" : "Make active", (_e, cx) => {
+            if (this.switching) return;
+            this.switching = l.login; cx.notify();
+            switchGhAccount(l.login, l.host).catch((e) => notify({ title: "Could not switch gh account", body: String(e?.message ?? e), level: "error" }))
+              .finally(() => { this.switching = null; this.readLogins(cx, true); });
+          }))))
+      .child(this.row(t, "Add an account", "Runs gh auth login in a new tab. The new account becomes gh's active one; switch back here.",
+        h_flex().gap(8)
+          .child(this.button(t, "set-gh-reread", "Reread", (_e, cx) => this.readLogins(cx, true)))
+          .child(this.button(t, "set-gh-add", "Add…", () => { this.close(); addGhAccount(); }))))
+      .child(div().h(18))
+      .child(this.heading(t, "Which account reads a repository"))
+      .child(this.toggle(t, "github.autoAccount", "Find the right account", "The PR and Issues panels use the first account that can see each repository, active one first, and remember it"))
+      .child(this.text(t, "github.repos", "Pin by repository", "owner/name=login pairs. The gh menu in the PR and Issues panels sets these. Wins over the rest."))
       .child(this.text(t, "github.accounts", "Pin by owner", "owner=login pairs, comma separated. A pin wins over finding."))
       .child(this.row(t, "Remembered", known.length
         ? known.map(([k, v]) => `${k.split("|")[1]} → ${v || "active account"}`).join(" · ")
         : "None yet: an account is remembered the first time a repository is read",
-        this.button(t, "set-gh-forget", "Forget", () => setShared("sab.gh.accounts", {})), !known.length));
+        this.button(t, "set-gh-forget", "Forget", () => setShared(ACCOUNTS, {})), !known.length));
   }
 
   agentPage(t, c) {

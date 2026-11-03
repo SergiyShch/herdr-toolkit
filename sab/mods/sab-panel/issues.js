@@ -11,7 +11,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Input, InputState } from "gpui-base";
 import { exec, theme } from "herdr";
-import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND } from "./lib.js";
+import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker } from "./lib.js";
 
 const FIELDS = "number,title,url,author,assignees,labels,updatedAt,comments,milestone";
 const limit = () => Math.max(1, Math.min(500, Number(cfg().issues.limit) || 100));
@@ -30,9 +30,10 @@ export class Issues {
     this.search = InputState.new({ placeholder: "Filter issues" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.refresh(cx);
-    cx.timer.every(15000, (cx) => { if (Date.now() - (this.loadedAt ?? 0) > cfg().issues.refreshSeconds * 1000 - 5000) this.refresh(cx); });
+    cx.timer.every(15000, (cx) => { if (!this.accountOpen && Date.now() - (this.loadedAt ?? 0) > cfg().issues.refreshSeconds * 1000 - 5000) this.refresh(cx); });
   }
 
+  reload(cx) { this.loadedAt = 0; this.refresh(cx); }
   gh(args) { return ghAs(this.account ?? "", args, { cwd: this.root ?? this.cwd, on: this.on }); }
 
   refresh(cx) {
@@ -57,6 +58,7 @@ export class Issues {
         const who = await ghAccount(this.root, on);
         if (key() !== context) return;
         this.account = who.account; this.ghRepo = who.repo; this.pinned = who.pinned;
+        this.logins = await ghLogins(on);
         if (who.repo) this.repo = `${who.repo.owner}/${who.repo.name}`;
         let r;
         try { r = await this.gh(["issue", "list", "--state", "open", "--limit", String(limit()), "--json", FIELDS]); }
@@ -190,6 +192,7 @@ export class Issues {
             .child(div().text_size(17).text_color(c.text).child("Issues"))
             .when(this.list.length > 0, (el) => el.child(div().pb(2).text_size(12).text_color(c.dim).child(`${this.list.length} open`))))
           .child(h_flex().gap(G.xs).items_center().flex_none()
+            .when(Boolean(this.root) && !this.outside, (el) => el.child(accountPicker(this, c, "issues")))
             .child(Button.new("issues-refresh").size(26).items_center().justify_center().rounded(6).cursor_pointer()
               .tooltip(this.loadedAt ? `Refresh · updated ${clock(this.loadedAt)}` : "Refresh").hover((s) => s.bg(c.subtle))
               .on_click((_e, cx) => { this.loadedAt = 0; this.refresh(cx); })

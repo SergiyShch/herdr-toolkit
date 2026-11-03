@@ -4,10 +4,12 @@
 // `panel-body` stack in layouts/sab.json; sab-tabs picks one with
 // layout.select and shows or hides the `panel` column. A hidden panel stays
 // alive, so each one checks `isShown(id)` before it reads git or GitHub.
-import { div } from "gpui-kit";
-import { EditorState, TextView } from "gpui-base";
+import { div, svg } from "gpui-kit";
+import { EditorState, TextView, Button, Popover, v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared } from "herdr";
-import { cfg } from "./config.js";
+import { cfg, setSetting } from "./config.js";
+import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
+export { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
 export { cfg, prompt } from "./config.js";
 
 export const ICON = "mods/sab-panel/icons/";
@@ -88,7 +90,6 @@ export function ghAs(account, args, opts) {
   return account ? exec("sh", ["-c", AS, "sh", account, ...args], opts) : exec("gh", args, opts);
 }
 
-const ACCOUNTS = "sab.gh.accounts"; // "<machine>|owner/repo" -> account ("" = gh's active one)
 const probing = new Map();
 
 // The repository's GitHub owner/name, from its origin remote.
@@ -98,16 +99,22 @@ export async function githubRepo(root, on) {
   return m ? { owner: m[1], name: m[2] } : null;
 }
 
-// Which gh account reads this repository: pinned in settings (github.accounts,
-// by owner), else the one found earlier, else the first logged-in account that
-// can see it (gh's active one first). Remembered in shared state.
+// The account pinned for a repository: by owner/name first, then by owner.
+function pinFor(repo) {
+  const gh = cfg().github ?? {}, low = (s) => String(s).toLowerCase();
+  const find = (map, k) => Object.entries(map ?? {}).find(([x]) => low(x) === low(k))?.[1];
+  return find(gh.repos, `${repo.owner}/${repo.name}`) ?? find(gh.accounts, repo.owner) ?? null;
+}
+
+// Which gh account reads this repository: pinned in settings (github.repos, then
+// github.accounts by owner), else the one found earlier, else the first
+// logged-in account that can see it (gh's active one first). Remembered in shared state.
 export async function ghAccount(root, on) {
   const repo = await githubRepo(root, on);
   if (!repo) return { repo: null, account: "" };
-  const gh = cfg().github ?? {}, pinned = gh.accounts ?? {};
-  const pin = pinned[repo.owner] ?? Object.entries(pinned).find(([k]) => k.toLowerCase() === repo.owner.toLowerCase())?.[1];
+  const pin = pinFor(repo);
   if (pin) return { repo, account: pin, pinned: true };
-  if (gh.autoAccount === false) return { repo, account: "" };
+  if (cfg().github?.autoAccount === false) return { repo, account: "" };
   const k = `${on ?? ""}|${repo.owner}/${repo.name}`.toLowerCase();
   const known = shared(ACCOUNTS) ?? {};
   if (k in known) return { repo, account: known[k] };
@@ -123,10 +130,68 @@ async function probe(repo, cwd, on) {
   const can = (account) => ghAs(account, ["api", `repos/${repo.owner}/${repo.name}`, "--jq", ".full_name"], { cwd, on })
     .then((r) => r.code === 0).catch(() => false);
   if (await can("")) return "";
-  const st = await exec("gh", ["auth", "status"], { cwd, on }).catch(() => null);
-  const logins = [...new Set([...`${st?.stdout ?? ""}\n${st?.stderr ?? ""}`.matchAll(/account (\S+)/g)].map((m) => m[1]))];
-  for (const login of logins) if (await can(login)) return login;
+  for (const { login, active, ok } of await ghLogins(on)) if (ok && !active && await can(login)) return login;
   return null; // nobody can: don't remember, try again next time
+}
+
+// Pins a repository to one account ("" or null: back to automatic).
+export function setRepoAccount(repo, login) {
+  if (!repo) return Promise.resolve();
+  const name = `${repo.owner}/${repo.name}`, low = name.toLowerCase();
+  const repos = Object.fromEntries(Object.entries(cfg().github?.repos ?? {}).filter(([k]) => k.toLowerCase() !== low));
+  if (login) repos[name] = login;
+  return setSetting("github.repos", repos);
+}
+
+// The account switch in the PR and Issues panels' headers: which login reads this
+// repository, a menu to pin another one (or go back to automatic), add one, or
+// make one gh's active account. `p` is the panel: it has account, ghRepo, pinned,
+// on, and reload(cx).
+export function accountPicker(p, c, prefix) {
+  const id = `${prefix}-gh`, list = p.logins ?? [];
+  const active = list.find((l) => l.active)?.login;
+  const who = p.account || active || "gh";
+  const trigger = Button.new(`${id}-trigger`).h(26).px(8).gap(5).flex_none().items_center().rounded(6).cursor_pointer()
+    .accessibility_label(`GitHub account: ${who}`).tooltip(p.pinned ? `gh as ${who}, pinned. Click to change.` : `gh as ${who}. Click to change.`)
+    .hover((s) => s.bg(c.subtle))
+    .child(svg(`${ICON}github.svg`).size(13).text_color(c.muted))
+    .child(div().max_w(110).truncate().text_size(11.5).text_color(c.muted).child(who))
+    .child(svg(`${ICON}chevron-down.svg`).size(11).text_color(c.dim));
+  const popover = Popover.new(id).trigger(trigger).anchor("top_right").open(Boolean(p.accountOpen))
+    .on_open_change((open, cx) => {
+      p.accountOpen = open; cx.notify();
+      if (open) cx.spawn(async (cx) => { p.logins = await ghLogins(p.on, true); cx.notify(); });
+    });
+  if (!p.accountOpen) return popover;
+  const pick = (login, cx) => {
+    p.accountOpen = false; cx.notify();
+    setRepoAccount(p.ghRepo, login).then(() => { if (!login && p.root) forgetGhAccount(p.root, p.on, p.ghRepo); })
+      .catch((e) => notify({ title: "Could not save the account", body: String(e?.message ?? e), level: "error" }))
+      .finally(() => cx.spawn(async (cx) => p.reload(cx)));
+  };
+  const item = (key, label, note, checked, onClick, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(G.sm).items_center().rounded(6).cursor_pointer()
+    .disabled(disabled).hover((s) => s.bg(c.subtle)).accessibility_label(label)
+    .on_click((_e, cx) => onClick(cx))
+    .child(h_flex().flex_1().min_w(0).gap(6)
+      .child(div().flex_none().text_size(12).text_color(disabled ? c.dim : c.text).child(label))
+      .when(Boolean(note), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(c.dim).child(note))))
+    .child(div().w(14).flex_none().text_size(12).text_color(c.text).child(checked ? "✓" : ""));
+  const repo = p.ghRepo ? `${p.ghRepo.owner}/${p.ghRepo.name}` : null;
+  const space = spaces().find((s) => s.active)?.id;
+  return popover.content(v_flex().w(268).p(G.xs).gap(2).rounded(8).bg(c.popover).border_1().border_color(c.border)
+    .child(div().px(8).pt(6).pb(4).text_size(11).text_color(c.dim).child(repo ? `Read ${repo} as` : "Read GitHub as"))
+    .child(item("auto", "Automatic", "the first that can see it", !p.pinned, (cx) => pick(null, cx), !repo))
+    .children(list.map((l, i) => item(`l${i}`, l.login, [l.active ? "active" : null, l.ok ? null : "login broken", l.host !== "github.com" ? l.host : null].filter(Boolean).join(" · "),
+      p.pinned && p.account === l.login, (cx) => pick(l.login, cx), !repo || !l.ok)))
+    .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(11.5).text_color(c.dim).child(p.logins ? "gh is logged in to no account." : "Reading gh auth status…")))
+    .child(div().my(4).h(1).bg(c.border))
+    .children(list.filter((l) => !l.active && l.ok).map((l, i) => item(`sw${i}`, `Make ${l.login} active`, "for gh everywhere", false, (cx) => {
+      p.accountOpen = false; cx.notify();
+      switchGhAccount(l.login, l.host, p.on).then(() => notify({ title: `gh now uses ${l.login}`, body: "Your terminals' gh commands use it too." }))
+        .catch((e) => notify({ title: "Could not switch gh account", body: String(e?.message ?? e), level: "error" }))
+        .finally(() => cx.spawn(async (cx) => p.reload(cx)));
+    })))
+    .child(item("add", "Add an account…", "gh auth login, in a new tab", false, (cx) => { p.accountOpen = false; cx.notify(); addGhAccount(space); })));
 }
 
 // Forget the account found for a repository (after it stopped working).
@@ -139,7 +204,7 @@ export function forgetGhAccount(root, on, repo) {
 // Said when a repository can't be read: which account tried, and what to do.
 export function noAccess(repo, account) {
   const who = account ? `gh account ${account}` : "gh's active account";
-  return repo ? `${who} can't see ${repo.owner}/${repo.name}. Log in with one that can (gh auth login), or pin one for ${repo.owner} in herdr-sab settings → GitHub.` : null;
+  return repo ? `${who} can't see ${repo.owner}/${repo.name}. Pick another account from the gh menu above, or add one that can see it.` : null;
 }
 export const NOT_FOUND = /could not resolve to a repository|not found \(http 404\)|http 404/i;
 

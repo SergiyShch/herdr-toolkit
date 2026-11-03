@@ -15,7 +15,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **A right side panel** with **Files**, **Changes**, **Pull requests** and **Issues**. It follows the pane you're in, so each session sees its own repository.
   - **PR**: every open pull request, with checks, unresolved threads, reviewers, labels, files and diffs, and merge. One click hands your agent a **Code review**, **Describe change**, **Explain**, **Address feedback** or **Resolve conflicts** task in a new tab.
   - **Issues**: the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
-  - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically or pinned by owner.
+  - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. A gh menu in the panel header switches the account per repository, makes another one `gh`'s active account, or adds one.
 - **Tabs that name themselves.** An unnamed tab shows the issue key its branch carries (`WEB-142`, `#123`) or its agent's own title. A name you type always wins.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
 - **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.

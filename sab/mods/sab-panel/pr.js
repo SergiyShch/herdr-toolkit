@@ -22,7 +22,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker } from "./lib.js";
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
@@ -103,7 +103,7 @@ export class PullRequest {
     this.refresh(cx);
     // Every minute while shown, every 20 s while a check runs; never under an open picker.
     cx.timer.every(20000, (cx) => {
-      if (this.picker) return;
+      if (this.picker || this.accountOpen) return;
       const pending = this.checks().some((ch) => ch.state === "pending");
       if (pending || Date.now() - (this.loadedAt ?? 0) > cfg().pr.refreshSeconds * 1000 - 2000) this.refresh(cx);
     });
@@ -114,6 +114,7 @@ export class PullRequest {
     return (this.pr?.statusCheckRollup ?? []).map(checkOf).filter((ch) => !seen.has(ch.name) && seen.add(ch.name));
   }
 
+  reload(cx) { this.loadedAt = 0; this.refresh(cx); }
   gh(args) { return ghAs(this.account ?? "", args, { cwd: this.root ?? this.cwd, on: this.on }); }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
   // Whether a pull request (its URL) belongs to the focused pane's repository.
@@ -156,6 +157,7 @@ export class PullRequest {
         const who = await ghAccount(this.root, on);
         if (key() !== context) return;
         this.account = who.account; this.ghRepo = who.repo; this.pinned = who.pinned;
+        this.logins = await ghLogins(on);
         // The repository's open ones, read alongside the one shown.
         list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
         let view;
@@ -494,6 +496,7 @@ export class PullRequest {
       .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.listing ? "Open pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(pill, (el) => el.child(this.switchPill(c)))
+        .when(Boolean(this.root) && !this.outside, (el) => el.child(accountPicker(this, c, "pr")))
         .child(this.iconButton("pr-refresh", "refresh", this.loadedAt ? `Refresh · updated ${clock(this.loadedAt)}` : "Refresh", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c, this.loading))
         .when(Boolean(pr) && !this.listing, (el) => el.child(this.iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
         .when(Boolean(pr), (el) => el.child(this.iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
