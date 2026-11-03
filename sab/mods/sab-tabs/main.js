@@ -172,6 +172,13 @@ export default class Tabs extends View {
     });
   }
 
+  // The focused pane's folder and the machine it is on (null: this computer).
+  paneFolder(space, allPanes) {
+    const f = focused(), pane = f?.pane ? allPanes.find((p) => p.pane === f.pane) : allPanes.find((p) => p.focused);
+    const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
+    return { cwd: pane?.cwd || f?.cwd || space?.folder || null, on };
+  }
+
   // Opens the focused tab's Jira ticket (cmd-alt-j).
   openJira() {
     const space = spaces().find((s) => s.active), tab = space?.tabs?.find((t) => t.active);
@@ -330,6 +337,14 @@ export default class Tabs extends View {
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => openOverlay({ mod: "sab-open-with", kind: "popup", at: "top", width: 380 }))
       .child(svg(`${ICON}code.svg`).size(14)).when(labels, (el) => el.child("Editor"));
+    // The focused pane's folder in Finder; a pane on another machine has none here.
+    const where = this.paneFolder(space, allPanes);
+    const finder = div().id("open-finder").size(26).flex_none().flex().items_center().justify_center().rounded(6)
+      .text_color(where.cwd && !where.on ? t.muted : t.dim)
+      .tooltip(!where.cwd ? "Open in Finder: focus a pane first" : where.on ? `Open in Finder: the pane is on ${where.on}` : `Open in Finder\n${where.cwd}`)
+      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
+      .on_click(() => { if (where.cwd && !where.on) exec("open", [where.cwd]).catch(() => {}); })
+      .child(svg(`${ICON}finder.svg`).size(15));
     const sep = () => div().w(1).h(16).mx(4).flex_none().bg(t.border);
     const gcloud = this.gcloudChip(t, stop);
 
@@ -339,7 +354,8 @@ export default class Tabs extends View {
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
       .child(button("tab-new", svg(`${ICON}plus.svg`).size(15), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab"))
       .child(sep())
-      .when(Boolean(gcloud), (el) => el.child(gcloud).when(o.tabs.editorButton || PANELS.some((p) => o.panels[p.id] !== false), (el) => el.child(sep())))
+      .when(Boolean(gcloud), (el) => el.child(gcloud).when(o.tabs.editorButton || o.tabs.finderButton || PANELS.some((p) => o.panels[p.id] !== false), (el) => el.child(sep())))
+      .when(o.tabs.finderButton, (el) => el.child(finder))
       .when(o.tabs.editorButton, (el) => el.child(editor))
       .children(PANELS.filter((p) => o.panels[p.id] !== false).map(panelButton))
       .child(button("sab-settings", svg(`${ICON}settings.svg`).size(14), () => openOverlay({ mod: "sab-settings", kind: "dialog", width: 820, height: 620 }), "herdr-sab settings  ⌘⌥,"))

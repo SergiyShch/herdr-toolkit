@@ -18,6 +18,7 @@ export const DEFAULTS = {
     issueKeyGithub: false,   // #123 from a branch like 123-fix or issue-123
     agentTitle: true,        // the agent's own terminal title
     editorButton: true,      // Open in editor button in the tab bar
+    finderButton: true,      // Open in Finder button in the tab bar
     panelLabels: true,       // text beside the panel buttons' icons
   },
   context: {
@@ -65,7 +66,7 @@ export const DEFAULTS = {
 export function jiraKey(text) {
   return /(?:^|[^A-Za-z0-9])([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![A-Za-z0-9])/.exec(String(text ?? ""))?.[1] ?? null;
 }
-// The Atlassian site from jira.baseUrl ("mumz.atlassian.net" or any URL on it), or null.
+// The Atlassian site from jira.baseUrl ("your-site.atlassian.net" or any URL on it), or null.
 export function jiraSite() {
   const raw = String(cfg().jira?.baseUrl ?? "").trim();
   if (!raw) return null;

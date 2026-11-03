@@ -17,10 +17,10 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
   - **Issues** (off by default): the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
   - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. The account menu in the panel header switches it per repository or adds one.
 - **Tabs that name themselves.** An unnamed tab shows the Jira key its branch carries (`DS-1234`) or its agent's own title. A name you type always wins.
-- **Jira one key away.** Set your site (`https://mumz.atlassian.net`) and `⌘⌥J`, or the ticket button on the tab, opens `…/browse/DS-1234`. The PR panel links it too.
+- **Jira one key away.** Set your site (`https://your-site.atlassian.net`) and `⌘⌥J`, or the ticket button on the tab, opens `…/browse/DS-1234`. The PR panel links it too.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
 - **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.
-- **Your editor, one key away.** `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
+- **Your editor, one key away.** A Finder button opens the focused pane's folder in Finder. `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
 - **Settings for all of it.** **herdr-sab settings** sits under Herdr's own **Settings** in the sidebar. Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/sab.json`.
 
 ## Install

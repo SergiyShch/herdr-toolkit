@@ -177,6 +177,7 @@ export default class Settings extends View {
       .child(this.text(t, "jira.baseUrl", "Jira site", "A tab, branch or pull request naming DS-1234 opens <site>/browse/DS-1234. ⌘⌥J opens the tab's."))
       .child(div().h(18))
       .child(this.heading(t, "Buttons"))
+      .child(this.toggle(t, "tabs.finderButton", "Open in Finder", "The focused pane's folder"))
       .child(this.toggle(t, "tabs.editorButton", "Open in editor", "Cmd+Shift+O works either way"))
       .child(this.toggle(t, "tabs.panelLabels", "Labels beside icons", "Off: icons only, names in tooltips"));
   }

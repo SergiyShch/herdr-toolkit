@@ -190,7 +190,7 @@ Nothing is written to Herdr: automatic names are only drawn, so other layouts sh
 
 Settings: turn automatic names off, or choose the sources (Jira keys, GitHub numbers, agent title).
 
-**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://mumz.atlassian.net`). Then a tab whose name, branch or folder carries a key like `DS-1234` gets a ticket button while it's active, and `⌘⌥J` opens it: `https://mumz.atlassian.net/browse/DS-1234`. The PR panel shows the same link for a key in the pull request's title or branch.
+**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://your-site.atlassian.net`); it's empty by default, and the links only appear once it's set. Then a tab whose name, branch or folder carries a key like `DS-1234` gets a ticket button while it's active, and `⌘⌥J` opens it: `https://your-site.atlassian.net/browse/DS-1234`. The PR panel shows the same link for a key in the pull request's title or branch.
 
 ---
 
@@ -248,6 +248,8 @@ The chip reflects your **active gcloud configuration**, which is global, not per
 ---
 
 ## 7. Open in editor
+
+The Finder button (left of **Editor**) opens the focused pane's folder in Finder. It's greyed out for a pane on another machine.
 
 `⌘⇧O`, the **Editor** button in the tab bar, or **Open with…** in Files and Preview opens a small list of the editors installed on this Mac:
 
@@ -309,7 +311,8 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 |---|---|---|---|
 | **Tab bar** | Name tabs automatically | on | Off: Herdr's own names |
 | | Use: Jira keys · GitHub #123 · Agent title | Jira and agent title on | chips |
-| | Jira site | none | e.g. `https://mumz.atlassian.net`; DS-1234 opens `<site>/browse/DS-1234` |
+| | Jira site | none | e.g. `https://your-site.atlassian.net`; DS-1234 opens `<site>/browse/DS-1234` |
+| | Open in Finder | on | the focused pane's folder |
 | | Open in editor | on | `⌘⇧O` works either way |
 | | Labels beside icons | on | Off: icons only |
 | **Panels** | Files · Changes · Pull requests · Issues | Issues off | chips; off: no button |
