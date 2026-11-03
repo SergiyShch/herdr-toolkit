@@ -1,0 +1,8 @@
+Kanso, a layout for the Herdr app
+Copyright 2026 jlopezlira
+
+The kanso-* mods are derived from mods shipped with Herdr
+(https://github.com/herdrdev/herdr-app, Apache License 2.0), through the
+0oz-design fork by 0OZ (https://github.com/0OZ/0oz-design) and the
+minimalistic layout by José Gutiérrez (https://github.com/josedugu/minimalistic).
+Each file's header lists who changed what.

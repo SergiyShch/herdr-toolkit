@@ -1,0 +1,7 @@
+{
+  "layout:sab": {
+    "cmd-shift-o": "mod.open:sab-open-with",
+    "cmd-alt-g": "sab-tabs.gcloud-login",
+    "cmd-alt-,": "mod.open:sab-settings"
+  }
+}

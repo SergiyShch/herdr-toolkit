@@ -1,0 +1,134 @@
+// herdr-sab settings: one file, ~/.config/herdr-app/sab.json, holding only what
+// differs from DEFAULTS below. sab-tabs reads the file every few seconds and
+// publishes it as shared "sab.settings"; every mod reads `cfg()`, which lays
+// that over DEFAULTS, and re-renders when it changes. sab-settings (the gear in
+// the tab bar) edits the same file.
+//
+// Herdr does not let a mod import another mod's files, so this file is copied
+// into each mod by scripts/sync-shared.sh. Edit sab/shared/config.js only.
+import { shared, setShared, appHome, readTextFile, writeTextFile } from "herdr";
+
+export const SETTINGS_FILE = () => `${appHome()}/sab.json`;
+export const SHARED_KEY = "sab.settings";
+
+export const DEFAULTS = {
+  tabs: {
+    autoName: true,          // name unnamed tabs automatically
+    issueKeyJira: true,      // WEB-142 from the branch or folder
+    issueKeyGithub: true,    // #123 from a branch like 123-fix or issue-123
+    agentTitle: true,        // the agent's own terminal title
+    editorButton: true,      // Open in editor button in the tab bar
+    panelLabels: true,       // text beside the panel buttons' icons
+  },
+  context: {
+    enabled: true,           // Claude Code context % on tabs
+    warnAt: 80,              // % used from which it turns red
+    staleMinutes: 10,        // older readings are dimmed
+    cacheRoots: ["~/.harp", "~/.local/state/herdr/plugins/herdr-agent-usage"],
+  },
+  gcloud: {
+    enabled: true,
+    label: "project",        // what the chip shows: "project" | "account" | "none"
+    tokenCheck: true,        // also check the login still works (uses the network)
+    tokenCheckMinutes: 10,
+    refreshMinutes: 2,
+    loginArgs: ["auth", "login"],  // e.g. ["auth", "login", "--update-adc"]
+  },
+  panels: { files: true, changes: true, pr: true, issues: true },
+  agent: {
+    prefer: "claude",        // programs.json key of the agent tasks start with; "" = first installed
+  },
+  pr: {
+    refreshSeconds: 60,
+    mergeMethod: "auto",     // "auto" | "squash" | "merge" | "rebase"
+    rowActions: true,        // Review / Describe / browser on the open list
+    sections: { description: true, people: true, checks: true, threads: true, agent: true, files: true },
+    tasks: { review: true, describe: true, explain: true, feedback: true, conflicts: true },
+  },
+  issues: { limit: 100, refreshSeconds: 120, startButton: true },
+  changes: { commit: true },
+  // Task prompts, overriding the built-in ones. Placeholders: {number} {url}
+  // {title} {head} {base}. Keys: review, describe, explain, feedback,
+  // conflicts, issue.
+  prompts: {},
+};
+
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+export function merge(base, over) {
+  if (!isObj(base) || !isObj(over)) return over === undefined ? base : over;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) out[k] = isObj(base[k]) && isObj(v) ? merge(base[k], v) : v;
+  return out;
+}
+
+// What `value` changes from `base`: the object to save.
+export function diff(base, value) {
+  if (isObj(base) && isObj(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      const d = diff(base[k], v);
+      if (d !== undefined) out[k] = d;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return JSON.stringify(base) === JSON.stringify(value) ? undefined : value;
+}
+
+let memo = { raw: undefined, value: DEFAULTS };
+// The settings now: DEFAULTS with the file's values over them.
+export function cfg() {
+  const raw = shared(SHARED_KEY);
+  if (raw !== memo.raw) memo = { raw, value: isObj(raw) ? merge(DEFAULTS, raw) : DEFAULTS };
+  return memo.value;
+}
+
+export function get(path) {
+  return path.split(".").reduce((v, k) => (v == null ? v : v[k]), cfg());
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split("."), out = JSON.parse(JSON.stringify(obj ?? {}));
+  let at = out;
+  for (const k of keys.slice(0, -1)) { if (!isObj(at[k])) at[k] = {}; at = at[k]; }
+  at[keys[keys.length - 1]] = value;
+  return out;
+}
+
+// Reads the file. { text, value } or { text: null } when there is none; throws on bad JSON.
+export async function readSettings() {
+  const text = await readTextFile(SETTINGS_FILE());
+  if (!text) return { text: null, value: {} };
+  const value = JSON.parse(text);
+  if (!isObj(value)) throw new Error("sab.json must hold a JSON object");
+  return { text, value };
+}
+
+// Saves `full` (complete settings) as the diff from DEFAULTS, and publishes it.
+export async function saveSettings(full) {
+  const over = diff(DEFAULTS, full) ?? {};
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const now = await readTextFile(SETTINGS_FILE()).catch(() => null);
+    try {
+      await writeTextFile(SETTINGS_FILE(), JSON.stringify(over, null, 2) + "\n", now ?? null);
+      setShared(SHARED_KEY, over);
+      return over;
+    } catch (e) { if (attempt) throw e; }
+  }
+}
+
+// One setting, by dotted path ("gcloud.enabled").
+export function setSetting(path, value) {
+  return saveSettings(setPath(cfg(), path, value));
+}
+
+export function resetSettings() {
+  return saveSettings(DEFAULTS);
+}
+
+// A task prompt: the configured template, else the built-in text.
+export function prompt(kind, vars, fallback) {
+  const t = cfg().prompts?.[kind];
+  if (typeof t !== "string" || !t.trim()) return fallback;
+  return t.replace(/\{(number|url|title|head|base)\}/g, (_m, k) => String(vars[k] ?? ""));
+}
