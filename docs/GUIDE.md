@@ -190,7 +190,14 @@ Nothing is written to Herdr: automatic names are only drawn, so other layouts sh
 
 Settings: turn automatic names off, or choose the sources (Jira keys, GitHub numbers, agent title).
 
-**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://your-site.atlassian.net`); it's empty by default, and the links only appear once it's set. Then a tab whose name, branch or folder carries a key like `DS-1234` gets a ticket button while it's active, and `⌘⌥J` opens it: `https://your-site.atlassian.net/browse/DS-1234`. The PR panel shows the same link for a key in the pull request's title or branch.
+**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://your-site.atlassian.net`); it's empty by default, and the links only appear once it's set. Then every Jira key herdr-sab shows becomes a link to `https://your-site.atlassian.net/browse/DS-1234`:
+
+- **Tabs**: a key in the tab's name, its agent's title, its branch or its folder gives the active tab a ticket button; `⌘⌥J` opens it.
+- **Pull requests**: chips for keys in the title or branch, in the header and on each row of the open list; keys in the description become links; chips under comments and review threads that mention one.
+- **Issues**: chips for keys in an issue's title.
+- **Markdown** in Files and Preview: keys become links.
+
+One pattern finds them all: two to ten capitals and digits starting with a letter, a dash, a number (`DS-1234`, `WEB2-7`). Lookalikes such as `UTF-8`, `SHA-256` or `ISO-8601` are skipped. For no false matches at all, list your projects in settings → Tab bar → **Projects** (`DS, WEB`): then only those count, and lowercase `ds-1234` in branch and folder names counts too.
 
 ---
 
@@ -311,7 +318,8 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 |---|---|---|---|
 | **Tab bar** | Name tabs automatically | on | Off: Herdr's own names |
 | | Use: Jira keys · GitHub #123 · Agent title | Jira and agent title on | chips |
-| | Jira site | none | e.g. `https://your-site.atlassian.net`; DS-1234 opens `<site>/browse/DS-1234` |
+| | Jira site | none | e.g. `https://your-site.atlassian.net`; every DS-1234 shown links to `<site>/browse/DS-1234` |
+| | Projects | any | `DS, WEB`: only these keys count; lowercase in branches too |
 | | Open in Finder | on | the focused pane's folder |
 | | Open in editor | on | `⌘⇧O` works either way |
 | | Labels beside icons | on | Off: icons only |

@@ -11,7 +11,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Input, InputState } from "gpui-base";
 import { exec, theme } from "herdr";
-import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker } from "./lib.js";
+import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips } from "./lib.js";
 
 const FIELDS = "number,title,url,author,assignees,labels,updatedAt,comments,milestone";
 const limit = () => Math.max(1, Math.min(500, Number(cfg().issues.limit) || 100));
@@ -130,6 +130,7 @@ export class Issues {
             .child(svg(`${ICON}agent.svg`).size(12).text_color(c.muted))
             .child(div().text_size(11.5).text_color(c.text).child("Start")))))
         .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
+        .when(true, (el) => { const jira = jiraChips(`issue-${i}`, issue.title, c); return jira.length ? el.child(h_flex().flex_wrap().gap(6).children(jira)) : el; })
         .when(assignees.length > 0 || (issue.labels ?? []).length > 0, (el) => el.child(h_flex().w_full().flex_wrap().gap(6).items_center()
           .when(assignees.length > 0, (el) => el.child(div().text_size(11.5).text_color(c.muted).child(`→ ${assignees.join(", ")}`)))
           .children((issue.labels ?? []).slice(0, 6).map((l) => {

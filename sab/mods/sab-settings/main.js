@@ -28,6 +28,7 @@ const SECTIONS = [
 const LISTS = {
   "context.cacheRoots": { split: (v) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), join: (a) => a.join(", "), placeholder: "~/.harp, ~/.local/state/…" },
   "gcloud.loginArgs": { split: (v) => v.trim().split(/\s+/).filter(Boolean), join: (a) => a.join(" "), placeholder: "auth login" },
+  "jira.projects": { split: (v) => v.split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean), join: (a) => (a ?? []).join(", "), placeholder: "DS, WEB (empty: any)" },
   "jira.baseUrl": { split: (v) => v.trim(), join: (v) => v ?? "", placeholder: "https://your-site.atlassian.net", empty: "" },
   // owner/name=login pairs; the panels' account menu writes these too.
   "github.repos": {
@@ -174,7 +175,8 @@ export default class Settings extends View {
       .child(this.chips(t, "Use", null, [["tabs.issueKeyJira", "Jira keys"], ["tabs.issueKeyGithub", "GitHub #123"], ["tabs.agentTitle", "Agent title"]], off))
       .child(div().h(18))
       .child(this.heading(t, "Jira"))
-      .child(this.text(t, "jira.baseUrl", "Jira site", "A tab, branch or pull request naming DS-1234 opens <site>/browse/DS-1234. ⌘⌥J opens the tab's."))
+      .child(this.text(t, "jira.baseUrl", "Jira site", "Every DS-1234 shown (tabs, pull requests, comments, issues, Markdown) links to <site>/browse/DS-1234. ⌘⌥J opens the tab's."))
+      .child(this.text(t, "jira.projects", "Projects", "Only these keys count, so UTF-8 and the like never do; lowercase ds-1234 in branch names counts too. Empty: any upper-case key."))
       .child(div().h(18))
       .child(this.heading(t, "Buttons"))
       .child(this.toggle(t, "tabs.finderButton", "Open in Finder", "The focused pane's folder"))

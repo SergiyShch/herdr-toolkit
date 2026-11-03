@@ -37,6 +37,7 @@ export const DEFAULTS = {
   },
   jira: {
     baseUrl: "",             // e.g. "https://your-site.atlassian.net": DS-1234 opens <baseUrl>/browse/DS-1234
+    projects: [],            // e.g. ["DS", "WEB"]: only these keys count, and lowercase ds-1234 in branches too
   },
   panels: { files: true, changes: true, pr: true, issues: false },
   github: {
@@ -62,10 +63,42 @@ export const DEFAULTS = {
   prompts: {},
 };
 
-// A Jira-style key (DS-1234) in some text, or null.
-export function jiraKey(text) {
-  return /(?:^|[^A-Za-z0-9])([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![A-Za-z0-9])/.exec(String(text ?? ""))?.[1] ?? null;
+// ---- Jira keys -------------------------------------------------------------------
+
+// Things shaped like a key that aren't tickets.
+const NOT_JIRA = new Set(["UTF", "SHA", "ISO", "RFC", "HTTP", "HTTPS", "TLS", "SSL", "AES", "RSA", "MD", "CVE", "GPT", "COVID", "ECMA", "ES", "IPV", "PEP", "ARM", "AMD", "WIN", "MAC", "IOS", "MACOS", "WCAG", "ISBN", "EAN", "UPC", "GMT", "UTC", "PR", "V"]);
+const KEY = /(^|[^A-Za-z0-9])([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,7})(?![A-Za-z0-9])/g;
+
+// Every Jira key in some text (DS-1234), once each, in order. Keys must be
+// upper case, except with `loose` (branch and folder names) when jira.projects
+// lists the project: then ds-1234 counts too. With jira.projects set, only
+// those projects count.
+export function jiraKeys(text, { loose = false } = {}) {
+  const projects = (cfg().jira?.projects ?? []).map((p) => String(p).toUpperCase());
+  const out = [];
+  for (const m of String(text ?? "").matchAll(KEY)) {
+    const raw = m[2], project = raw.toUpperCase();
+    if (projects.length ? !projects.includes(project) : NOT_JIRA.has(project)) continue;
+    if (raw !== project && !(loose && projects.length)) continue;
+    if (!/^[A-Z]/.test(project)) continue;
+    const key = `${project}-${m[3]}`;
+    if (!out.includes(key)) out.push(key);
+  }
+  return out;
 }
+// The first Jira key in some text, or null.
+export const jiraKey = (text, opts) => jiraKeys(text, opts)[0] ?? null;
+
+// Markdown with each Jira key made a link to its ticket; code, links and URLs left alone.
+export function linkJira(md) {
+  if (!jiraSite()) return md;
+  return String(md ?? "").split(/(```[\s\S]*?```|`[^`\n]*`|\[[^\]]*\]\([^)]*\)|<[^>\n]*>|https?:\/\/\S+)/).map((part, i) => i % 2 ? part
+    : part.replace(KEY, (all, pre, project, n) => {
+      const url = jiraUrl(`${project}-${n}`);
+      return url && jiraKeys(`${project}-${n}`).length ? `${pre}[${project}-${n}](${url})` : all;
+    })).join("");
+}
+
 // The Atlassian site from jira.baseUrl ("your-site.atlassian.net" or any URL on it), or null.
 export function jiraSite() {
   const raw = String(cfg().jira?.baseUrl ?? "").trim();

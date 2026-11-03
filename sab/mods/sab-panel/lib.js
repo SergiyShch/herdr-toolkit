@@ -7,10 +7,10 @@
 import { div, svg } from "gpui-kit";
 import { EditorState, TextView, Button, Popover, v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared, openOverlay } from "herdr";
-import { cfg, setSetting } from "./config.js";
+import { cfg, setSetting, jiraKeys, jiraUrl, linkJira } from "./config.js";
 import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
 export { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
-export { cfg, prompt, jiraKey, jiraUrl } from "./config.js";
+export { cfg, prompt, jiraKey, jiraKeys, jiraUrl, linkJira } from "./config.js";
 
 export const ICON = "mods/sab-panel/icons/";
 
@@ -259,5 +259,18 @@ export function codeState(path, text) {
 export function markdownView(id, text, t) {
   return div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
     .child(div().px(16).py(12).text_size(13).text_color(t.foreground)
-      .child(TextView.markdown(id, text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : text).selectable(true)));
+      .child(TextView.markdown(id, linkJira(text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : text)).selectable(true)
+        .on_link_click((url) => { if (/^https?:\/\//.test(url)) openUrl(url); })));
+}
+
+// A small chip per Jira key found in `texts` (DS-1234), each opening its ticket.
+// Nothing when no Jira site is set. A click doesn't reach the row under it.
+export function jiraChips(id, texts, c, { loose = false } = {}) {
+  const keys = [...new Set((Array.isArray(texts) ? texts : [texts]).flatMap((x, i) => jiraKeys(x, { loose: loose && i > 0 })))];
+  return keys.map((k) => ({ k, url: jiraUrl(k) })).filter((x) => x.url).slice(0, 6).map(({ k, url }, i) =>
+    Button.new(`${id}-jira-${i}`).h(20).px(6).gap(4).flex_none().items_center().rounded(6).cursor_pointer()
+      .border_1().border_color(c.border).hover((s) => s.bg(c.subtle)).tooltip(`Open ${k} in Jira`).accessibility_label(`Open ${k} in Jira`)
+      .on_click((_e, cx) => { cx.stop_propagation(); openUrl(url); })
+      .child(svg(`${ICON}ticket.svg`).size(11).text_color(c.muted))
+      .child(div().text_size(11).text_color(c.text).child(k)));
 }

@@ -48,7 +48,7 @@ function find(node, id) {
 // with or names ("123-fix", "fix/123-login", "issue-123").
 export function issueKey(text, { jira = true, github = true } = {}) {
   const s = String(text ?? "");
-  const j = jira && jiraKey(s);
+  const j = jira && jiraKey(s, { loose: true });
   if (j) return j;
   const gh = github && /(?:^|\/)(?:issue-|issues-|gh-)?(\d{1,6})(?=[-_]|$)/i.exec(s);
   return gh ? `#${gh[1]}` : null;
@@ -74,7 +74,7 @@ export function autoName(tab, tabPanes, o = cfg().tabs) {
 // The Jira ticket a tab is about: from its name, its branch or its folder.
 export function tabJira(tab, tabPanes) {
   const first = tabPanes.find((p) => p.program?.agent) ?? tabPanes.find((p) => p.terminal) ?? tabPanes[0];
-  return jiraKey(tab.named ? tab.name : "") ?? jiraKey(first?.branch) ?? jiraKey(first?.cwd?.split(/[\\/]/).pop());
+  return jiraKey(tab.name) ?? jiraKey(cleanTitle(first?.title ?? "")) ?? jiraKey(first?.branch, { loose: true }) ?? jiraKey(first?.cwd?.split(/[\\/]/).pop(), { loose: true });
 }
 
 const isClaude = (p) => p?.app === "claude-code" || p?.program?.key === "claude";

@@ -22,7 +22,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraKey, jiraUrl } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips, linkJira } from "./lib.js";
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,comments,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
@@ -473,7 +473,10 @@ export class PullRequest {
             .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown")))
             .when(cfg().pr.rowActions, (el) => el.child(this.iconButton(`pr-open-web-${i}`, "external", "Open in browser", (cx) => { cx.stop_propagation(); openUrl(p.url); }, c))))
           .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-          .when((p.labels ?? []).length > 0, (el) => el.child(h_flex().w_full().flex_wrap().gap(6).children(p.labels.slice(0, 5).map((l) => labelChip(l, c, true)))))
+          .when(true, (el) => {
+            const jira = jiraChips(`pr-open-${i}`, [p.title, p.headRefName], c, { loose: true });
+            return jira.length || (p.labels ?? []).length ? el.child(h_flex().w_full().flex_wrap().gap(6).children(jira).children((p.labels ?? []).slice(0, 5).map((l) => labelChip(l, c, true)))) : el;
+          })
           .child(h_flex().w_full().gap(G.sm).items_center()
             .child(div().size(6).flex_none().rounded_full().bg(state.color))
             .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
@@ -607,15 +610,11 @@ export class PullRequest {
 
   // Labels (with their picker) and the Jira ticket the title or branch names.
   tags(c) {
-    const pr = this.pr, key = jiraKey(pr.title) ?? jiraKey(pr.headRefName), jira = jiraUrl(key);
+    const pr = this.pr, jira = jiraChips("pr", [pr.title, pr.headRefName], c, { loose: true });
     return h_flex().w_full().pt(G.sm).flex_wrap().gap(6).items_center()
-      .when(Boolean(jira), (el) => el.child(Button.new("pr-jira").h(22).px(8).gap(5).items_center().rounded(6).cursor_pointer()
-        .border_1().border_color(c.border).hover((s) => s.bg(c.subtle)).tooltip(`Open ${key} in Jira`)
-        .on_click(() => openUrl(jira))
-        .child(svg(`${ICON}ticket.svg`).size(12).text_color(c.muted))
-        .child(div().text_size(11.5).text_color(c.text).child(key))))
+      .children(jira)
       .children((pr.labels ?? []).map((l) => labelChip(l, c)))
-      .when(!(pr.labels ?? []).length && !jira, (el) => el.child(div().text_size(12).text_color(c.dim).child("No labels")))
+      .when(!(pr.labels ?? []).length && !jira.length, (el) => el.child(div().text_size(12).text_color(c.dim).child("No labels")))
       .when(pr.state === "OPEN", (el) => el.child(this.pickerFor("labels", c)));
   }
 
@@ -636,7 +635,8 @@ export class PullRequest {
             .child(h_flex().gap(G.sm).items_center()
               .child(div().text_size(12).text_color(c.text).child(m.author?.login === this.viewer ? "you" : m.author?.login ?? "someone"))
               .child(div().text_size(11).text_color(c.dim).child(ago(m.createdAt))))
-            .child(div().w_full().text_size(13).line_height(1.45).text_color(c.muted).child(body.length > 280 ? body.slice(0, 280) + "…" : body || "(empty)")));
+            .child(div().w_full().text_size(13).line_height(1.45).text_color(c.muted).child(body.length > 280 ? body.slice(0, 280) + "…" : body || "(empty)"))
+            .child(h_flex().flex_wrap().gap(6).children(jiraChips(`pr-comment-${i}`, body, c))));
       }));
   }
 
@@ -649,7 +649,7 @@ export class PullRequest {
       .child(text
         ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
           .when(long && !open, (el) => el.max_h(BODY_FOLD).overflow_hidden())
-          .child(TextView.markdown("pr-body-md", text).selectable(true).on_link_click((url) => openUrl(url)))
+          .child(TextView.markdown("pr-body-md", linkJira(text)).selectable(true).on_link_click((url) => openUrl(url)))
         : div().text_size(13).text_color(c.dim).child("No description."))
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
   }
@@ -713,6 +713,7 @@ export class PullRequest {
         .on_click(() => { if (th.url) openUrl(th.url); })
         .child(v_flex().w_full().gap(3)
           .child(div().w_full().text_size(13).line_height(1.45).text_color(c.text).child(th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body))
+          .child(h_flex().flex_wrap().gap(6).children(jiraChips(`pr-thread-${i}`, th.body, c)))
           .child(h_flex().w_full().flex_wrap().gap_x(G.md)
             .child(div().text_size(11).text_color(c.dim).child(`${th.path}${th.line ? `:${th.line}` : ""}`))
             .child(div().text_size(11).text_color(c.dim).child(th.author))
