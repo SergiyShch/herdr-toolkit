@@ -11,7 +11,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Input, InputState } from "gpui-base";
 import { exec, theme } from "herdr";
-import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt } from "./lib.js";
+import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND } from "./lib.js";
 
 const FIELDS = "number,title,url,author,assignees,labels,updatedAt,comments,milestone";
 const limit = () => Math.max(1, Math.min(500, Number(cfg().issues.limit) || 100));
@@ -33,7 +33,7 @@ export class Issues {
     cx.timer.every(15000, (cx) => { if (Date.now() - (this.loadedAt ?? 0) > cfg().issues.refreshSeconds * 1000 - 5000) this.refresh(cx); });
   }
 
-  gh(args) { return exec("gh", args, { cwd: this.root ?? this.cwd, on: this.on }); }
+  gh(args) { return ghAs(this.account ?? "", args, { cwd: this.root ?? this.cwd, on: this.on }); }
 
   refresh(cx) {
     if (!isShown(this.id)) { this.stale = true; return; }
@@ -54,13 +54,20 @@ export class Issues {
         this.outside = false; this.root = top.stdout.trim();
         const branch = await exec("git", ["branch", "--show-current"], { cwd: this.root, on }).catch(() => null);
         this.branch = branch?.stdout.trim() || null;
+        const who = await ghAccount(this.root, on);
+        if (key() !== context) return;
+        this.account = who.account; this.ghRepo = who.repo; this.pinned = who.pinned;
+        if (who.repo) this.repo = `${who.repo.owner}/${who.repo.name}`;
         let r;
         try { r = await this.gh(["issue", "list", "--state", "open", "--limit", String(limit()), "--json", FIELDS]); }
         catch { this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; return; }
         if (key() !== context) return;
         if (r.code !== 0) {
           const why = (r.stderr || r.stdout).trim().split("\n")[0];
-          this.error = /disabled issues/i.test(why) ? { title: "Issues are turned off for this repository." } : { title: "GitHub could not be read.", detail: why };
+          if (NOT_FOUND.test(why) && this.ghRepo && !this.pinned) forgetGhAccount(this.root, on, this.ghRepo);
+          this.error = /disabled issues/i.test(why) ? { title: "Issues are turned off for this repository." }
+            : NOT_FOUND.test(why) && this.ghRepo ? { title: "GitHub could not be read.", detail: noAccess(this.ghRepo, this.account) }
+            : { title: "GitHub could not be read.", detail: why };
           this.list = []; return;
         }
         this.list = JSON.parse(r.stdout).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
@@ -193,6 +200,6 @@ export class Issues {
           .child(Input.new(this.search).flex_1().h_full().text_size(12).text_color(c.text))))
         .child(body)
         .when(Boolean(this.loadedAt) && !this.error && !this.outside, (el) => el.child(div().text_size(10.5).text_color(c.dim)
-          .child(`Read from GitHub with gh · updated ${clock(this.loadedAt)}. Rereads every ${cfg().issues.refreshSeconds} s while shown.`))));
+          .child(`Read from GitHub with gh${this.account ? ` as ${this.account}` : ""} · updated ${clock(this.loadedAt)}. Rereads every ${cfg().issues.refreshSeconds} s while shown.`))));
   }
 }

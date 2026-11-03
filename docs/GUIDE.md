@@ -100,6 +100,8 @@ Click a panel button to show it, and click it again to close it. The panel is 42
 
 A hidden panel does no work: it doesn't run git or `gh` and catches up when you show it again.
 
+**Several GitHub accounts.** If you're logged in to `gh` with more than one account (`gh auth status`), for example a personal one and a work one, the PR and Issues panels pick the right one **for each repository**. They try `gh`'s active account first, then each other login, and remember the first one that can see the repository. The footnote names the account used ("Read from GitHub with gh as …"). You can pin accounts by owner in settings → GitHub. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
+
 ### Files
 
 - A tree of the focused pane's folder. It loads lazily, folder by folder, up to 500 entries per folder and 5,000 in total.
@@ -309,6 +311,9 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Check the login still works | on | network: `print-access-token` |
 | | Token check every | 10 min | |
 | | Login command | `auth login` | args after `gcloud` |
+| **GitHub** | Find the right account | on | first logged-in `gh` account that can see the repo |
+| | Pin by owner | none | `owner=login, …`; wins over finding |
+| | Remembered | — | which account each repository uses; **Forget** clears it |
 | **Agent tasks** | Start tasks with | Claude Code | any installed agent, or the first installed |
 | | Code review / Describe change / Explain it / Address feedback / Resolve conflicts | on | PR panel |
 | | Start on an issue | on | Issues panel |
@@ -362,6 +367,7 @@ Replace any agent task's first message with `prompts.<task>`. The tasks are `rev
 | Symptom | Cause and fix |
 |---|---|
 | PR or Issues: "The GitHub CLI is not installed." | Install `gh` and run `gh auth login`. |
+| PR or Issues: "… can't see owner/repo" | None of your `gh` logins can read that repository. Run `gh auth login` with an account that can, then **Try again**. If one can but wasn't picked, pin it in settings → GitHub (`owner=login`), or press **Forget** there. |
 | PR or Issues: "GitHub could not be read." | The first line of `gh`'s error is shown. Usually auth (`gh auth status`) or a repository whose `origin` isn't on GitHub. |
 | "No repository here" | The focused pane isn't inside a git repository. Click into one. |
 | "Issues are turned off for this repository." | Issues are disabled on GitHub for that repository. |

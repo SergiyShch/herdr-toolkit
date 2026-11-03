@@ -22,7 +22,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND } from "./lib.js";
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
@@ -114,7 +114,7 @@ export class PullRequest {
     return (this.pr?.statusCheckRollup ?? []).map(checkOf).filter((ch) => !seen.has(ch.name) && seen.add(ch.name));
   }
 
-  gh(args) { return exec("gh", args, { cwd: this.root ?? this.cwd, on: this.on }); }
+  gh(args) { return ghAs(this.account ?? "", args, { cwd: this.root ?? this.cwd, on: this.on }); }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
   // Whether a pull request (its URL) belongs to the focused pane's repository.
   local(url) {
@@ -153,6 +153,9 @@ export class PullRequest {
         ]);
         this.branch = branch.stdout.trim() || null;
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
+        const who = await ghAccount(this.root, on);
+        if (key() !== context) return;
+        this.account = who.account; this.ghRepo = who.repo; this.pinned = who.pinned;
         // The repository's open ones, read alongside the one shown.
         list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
         let view;
@@ -174,6 +177,10 @@ export class PullRequest {
         if (view.code !== 0) {
           const why = (view.stderr || view.stdout).trim();
           if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; }
+          else if (NOT_FOUND.test(why) && this.ghRepo) {
+            if (!this.pinned) forgetGhAccount(this.root, on, this.ghRepo);
+            this.error = { title: "GitHub could not be read.", detail: noAccess(this.ghRepo, this.account) }; this.pr = null;
+          }
           else { this.error = { title: "GitHub could not be read.", detail: why.split("\n")[0] }; this.pr = null; }
           return;
         }
@@ -754,7 +761,7 @@ export class PullRequest {
         .when(show.threads && this.threads.length > 0, (el) => el.child(this.discussion(c)))
         .when(show.agent && anyTask, (el) => el.child(this.agent(c)))
         .when(show.files, (el) => el.child(this.files(c)))
-        .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every ${cfg().pr.refreshSeconds} s while shown, every 20 s while a check runs.`));
+        .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.account ? ` as ${this.account}` : ""}${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every ${cfg().pr.refreshSeconds} s while shown, every 20 s while a check runs.`));
     } else if (this.outside) body = this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
     else if (this.error) body = this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
     else if (this.none) body = this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,

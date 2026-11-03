@@ -10,7 +10,7 @@
 // every ~3 s). Task prompts live only in the file (`prompts`).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, Input, InputState } from "gpui-base";
-import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run } from "herdr";
+import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run, shared, setShared } from "herdr";
 import { cfg, get, setSetting, resetSettings, DEFAULTS, SETTINGS_FILE } from "./config.js";
 
 const ICON = "mods/sab-panel/icons/";
@@ -19,6 +19,7 @@ const SECTIONS = [
   { id: "panels", title: "Side panels", icon: `${ICON}file.svg` },
   { id: "context", title: "Claude context", icon: `${ICON}chart.svg` },
   { id: "gcloud", title: "gcloud", icon: "icons/gcloud.svg" },
+  { id: "github", title: "GitHub", icon: `${ICON}github.svg` },
   { id: "agent", title: "Agent tasks", icon: `${ICON}agent.svg` },
   { id: "pr", title: "Pull requests", icon: `${ICON}pull-request.svg` },
   { id: "issues", title: "Issues", icon: `${ICON}issue.svg` },
@@ -28,6 +29,13 @@ const SECTIONS = [
 const LISTS = {
   "context.cacheRoots": { split: (v) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), join: (a) => a.join(", "), placeholder: "~/.harp, ~/.local/state/…" },
   "gcloud.loginArgs": { split: (v) => v.trim().split(/\s+/).filter(Boolean), join: (a) => a.join(" "), placeholder: "auth login" },
+  // owner=login pairs, comma separated.
+  "github.accounts": {
+    split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o && l)),
+    join: (o) => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join(", "),
+    placeholder: "my-org=my-login, other-org=work-login",
+    empty: {},
+  },
 };
 const defaultAt = (path) => path.split(".").reduce((v, k) => v?.[k], DEFAULTS);
 
@@ -43,7 +51,8 @@ export default class Settings extends View {
       input.set_value(l.join(get(path) ?? []));
       const save = () => {
         const next = l.split(input.value());
-        if (JSON.stringify(next) !== JSON.stringify(get(path))) this.set(path, next.length ? next : defaultAt(path));
+        const blank = Array.isArray(next) ? !next.length : !Object.keys(next).length;
+        if (JSON.stringify(next) !== JSON.stringify(get(path))) this.set(path, blank ? (l.empty ?? defaultAt(path)) : next);
       };
       input.on("submit", save);
       input.on("blur", save);
@@ -187,6 +196,18 @@ export default class Settings extends View {
       .child(this.text(t, "gcloud.loginArgs", "Login command", "What the login button runs after gcloud, e.g. auth login --update-adc", off));
   }
 
+  githubPage(t, c) {
+    const known = Object.entries(shared("sab.gh.accounts") ?? {});
+    return v_flex().w_full()
+      .child(this.heading(t, "Accounts"))
+      .child(this.toggle(t, "github.autoAccount", "Find the right account", "With several gh logins (gh auth status), the PR and Issues panels use the first one that can see each repository, active one first, and remember it"))
+      .child(this.text(t, "github.accounts", "Pin by owner", "owner=login pairs, comma separated. A pin wins over finding."))
+      .child(this.row(t, "Remembered", known.length
+        ? known.map(([k, v]) => `${k.split("|")[1]} → ${v || "active account"}`).join(" · ")
+        : "None yet: an account is remembered the first time a repository is read",
+        this.button(t, "set-gh-forget", "Forget", () => setShared("sab.gh.accounts", {})), !known.length));
+  }
+
   agentPage(t, c) {
     const options = [["", "First installed"], ...(this.agents ?? []).slice(0, 4).map((a) => [a.key, a.name])];
     if (c.agent.prefer && !options.some(([k]) => k === c.agent.prefer)) options.push([c.agent.prefer, c.agent.prefer]);
@@ -264,7 +285,7 @@ export default class Settings extends View {
           .on_click(() => { this.close(); run("app.settings"); }).child("Herdr settings…")));
 
     const page = { tabs: this.tabsPage, panels: this.panelsPage, context: this.contextPage, gcloud: this.gcloudPage,
-      agent: this.agentPage, pr: this.prPage, issues: this.issuesPage }[this.section].call(this, t, c);
+      github: this.githubPage, agent: this.agentPage, pr: this.prPage, issues: this.issuesPage }[this.section].call(this, t, c);
     const file = SETTINGS_FILE().startsWith(home()) ? "~" + SETTINGS_FILE().slice(home().length) : SETTINGS_FILE();
 
     return h_flex().id("sab-settings").track_focus(this.handle).w_full().h(620).min_h(0).items_start().bg(t.popover)

@@ -6,7 +6,7 @@
 // alive, so each one checks `isShown(id)` before it reads git or GitHub.
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
-import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify } from "herdr";
+import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared } from "herdr";
 import { cfg } from "./config.js";
 export { cfg, prompt } from "./config.js";
 
@@ -78,6 +78,70 @@ export function ago(iso) {
 export const clock = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 export const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
 export const openUrl = (url) => exec("open", [url]).catch(() => exec("xdg-open", [url])).catch(() => {});
+
+// ---- GitHub CLI, per repository account ---------------------------------------------
+
+// Runs gh as one of its logged-in accounts. The token is read inside the shell,
+// so it never shows in a process list. "" runs gh as its active account.
+const AS = 'u=$1; shift; t=$(gh auth token -u "$u" 2>/dev/null) || { echo "gh has no login for $u (gh auth login)" >&2; exit 97; }; GH_TOKEN=$t exec gh "$@"';
+export function ghAs(account, args, opts) {
+  return account ? exec("sh", ["-c", AS, "sh", account, ...args], opts) : exec("gh", args, opts);
+}
+
+const ACCOUNTS = "sab.gh.accounts"; // "<machine>|owner/repo" -> account ("" = gh's active one)
+const probing = new Map();
+
+// The repository's GitHub owner/name, from its origin remote.
+export async function githubRepo(root, on) {
+  const r = await exec("git", ["remote", "get-url", "origin"], { cwd: root, on }).catch(() => null);
+  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?\s*$/.exec(r?.stdout ?? "");
+  return m ? { owner: m[1], name: m[2] } : null;
+}
+
+// Which gh account reads this repository: pinned in settings (github.accounts,
+// by owner), else the one found earlier, else the first logged-in account that
+// can see it (gh's active one first). Remembered in shared state.
+export async function ghAccount(root, on) {
+  const repo = await githubRepo(root, on);
+  if (!repo) return { repo: null, account: "" };
+  const gh = cfg().github ?? {}, pinned = gh.accounts ?? {};
+  const pin = pinned[repo.owner] ?? Object.entries(pinned).find(([k]) => k.toLowerCase() === repo.owner.toLowerCase())?.[1];
+  if (pin) return { repo, account: pin, pinned: true };
+  if (gh.autoAccount === false) return { repo, account: "" };
+  const k = `${on ?? ""}|${repo.owner}/${repo.name}`.toLowerCase();
+  const known = shared(ACCOUNTS) ?? {};
+  if (k in known) return { repo, account: known[k] };
+  if (!probing.has(k)) probing.set(k, probe(repo, root, on).then((account) => {
+    probing.delete(k);
+    if (account !== null) setShared(ACCOUNTS, { ...(shared(ACCOUNTS) ?? {}), [k]: account });
+    return account ?? "";
+  }));
+  return { repo, account: await probing.get(k) };
+}
+
+async function probe(repo, cwd, on) {
+  const can = (account) => ghAs(account, ["api", `repos/${repo.owner}/${repo.name}`, "--jq", ".full_name"], { cwd, on })
+    .then((r) => r.code === 0).catch(() => false);
+  if (await can("")) return "";
+  const st = await exec("gh", ["auth", "status"], { cwd, on }).catch(() => null);
+  const logins = [...new Set([...`${st?.stdout ?? ""}\n${st?.stderr ?? ""}`.matchAll(/account (\S+)/g)].map((m) => m[1]))];
+  for (const login of logins) if (await can(login)) return login;
+  return null; // nobody can: don't remember, try again next time
+}
+
+// Forget the account found for a repository (after it stopped working).
+export function forgetGhAccount(root, on, repo) {
+  if (!repo) return;
+  const k = `${on ?? ""}|${repo.owner}/${repo.name}`.toLowerCase(), known = { ...(shared(ACCOUNTS) ?? {}) };
+  if (k in known) { delete known[k]; setShared(ACCOUNTS, known); }
+}
+
+// Said when a repository can't be read: which account tried, and what to do.
+export function noAccess(repo, account) {
+  const who = account ? `gh account ${account}` : "gh's active account";
+  return repo ? `${who} can't see ${repo.owner}/${repo.name}. Log in with one that can (gh auth login), or pin one for ${repo.owner} in herdr-sab settings → GitHub.` : null;
+}
+export const NOT_FOUND = /could not resolve to a repository|not found \(http 404\)|http 404/i;
 
 // Starts the preferred installed agent (settings: agent.prefer) in a new tab of the
 // space, in `folder`, with `task` as its first message. The tab gets `name`:

@@ -35,6 +35,10 @@ export const DEFAULTS = {
     loginArgs: ["auth", "login"],  // e.g. ["auth", "login", "--update-adc"]
   },
   panels: { files: true, changes: true, pr: true, issues: true },
+  github: {
+    autoAccount: true,       // find the logged-in gh account that can see each repository
+    accounts: {},            // pin by owner: { "my-org": "my-login" }
+  },
   agent: {
     prefer: "claude",        // programs.json key of the agent tasks start with; "" = first installed
   },
