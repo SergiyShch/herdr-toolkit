@@ -14,7 +14,7 @@ import { location, key, diffRows, insideRoot, isShown, cfg, createPr, defaultBra
 const countLines = (text) => text ? text.split("\n").length - Number(text.endsWith("\n")) : 0;
 // Lines added and removed, read live: an untracked file's count fills in once its diff loads.
 const total = (files, k) => files.reduce((n, f) => n + f[k], 0);
-const MAX_FILES = 1000, ROW = 28, MAX_WATCH = 20, RESCAN_MS = 30000;
+const MAX_FILES = 1000, ROW = 28, MAX_WATCH = 20, RESCAN_MS = 30000, FULL_MS = 30000;
 // Folders not worth looking into for repositories (build output, packages).
 const SKIP = ["node_modules", "vendor", "target", "dist", "build", "Pods", "DerivedData", "__pycache__"];
 
@@ -30,42 +30,78 @@ async function findRepos(cwd, on) {
   if (!r || (r.code !== 0 && !r.stdout)) return [];
   const found = r.stdout.split("\0").filter((p) => p.startsWith("./") && p.endsWith("/.git"))
     .map((p) => p.slice(2, -5)).filter((p) => p && insideRoot(p)).sort();
-  const max = Math.max(1, Math.min(100, Number(cfg().changes.maxRepos) || 40));
+  const max = Math.max(1, Math.min(200, Number(cfg().changes.maxRepos) || 100));
   return found.filter((p, i) => !found.slice(0, i).some((q) => p.startsWith(q + "/"))).slice(0, max);
 }
 
-// One repository's uncommitted changes.
+// What rarely changes, so a refresh needn't ask again: each repository's base
+// (origin's default branch, for 5 min) and how far HEAD is ahead of it (until
+// HEAD or the base moves). Every git call costs ~80 ms through macOS's
+// /usr/bin/git shim, and a folder can hold dozens of repositories.
+const BASES = new Map(), AHEAD = new Map(), BASE_MS = 5 * 60000;
+
+async function baseOf(root, on) {
+  const k = `${on ?? ""}|${root}`, hit = BASES.get(k);
+  if (hit && Date.now() - hit.at < BASE_MS) return hit.base;
+  const base = await defaultBranch(root, on).catch(() => null);
+  BASES.set(k, { base, at: Date.now() });
+  return base;
+}
+
+async function aheadOf(root, on, oid, base) {
+  const k = `${on ?? ""}|${root}|${oid}|${base}`;
+  if (AHEAD.has(k)) return AHEAD.get(k);
+  // The base's own tip, so a fetch that moves it counts again.
+  const r = await exec("git", ["rev-list", "--count", `refs/remotes/origin/${base}..HEAD`], { cwd: root, on }).catch(() => null);
+  const n = r?.code === 0 ? Number(r.stdout.trim()) || 0 : 0;
+  if (AHEAD.size > 500) AHEAD.clear();
+  AHEAD.set(k, n);
+  return n;
+}
+
+// One repository's uncommitted changes. A clean one costs a single git call:
+// porcelain v2 with --branch also says the branch and whether HEAD exists.
 async function readRepo(root, name, on) {
   const git = (args) => exec("git", args, { cwd: root, on });
-  const [status, head, branch] = await Promise.all([
-    git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
-    git(["rev-parse", "--verify", "HEAD"]),
-    git(["branch", "--show-current"]).catch(() => null),
-  ]);
+  const status = await git(["status", "--porcelain=v2", "--branch", "-z", "--no-renames", "--untracked-files=all"]);
   if (status.code !== 0) throw new Error((status.stderr || "git status failed").trim());
-  const hasHead = head.code === 0, stats = {};
-  const results = hasHead ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])] : [await git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), await git(["diff", "--numstat", "-z", "--no-renames"])];
-  for (const result of results) {
-    if (result.code !== 0) throw new Error(result.stderr);
-    for (const entry of result.stdout.split("\0")) {
-      const [a, d, ...parts] = entry.split("\t");
-      if (!parts.length) continue;
-      const path = parts.join("\t"), old = stats[path] ?? { add: 0, del: 0 };
-      stats[path] = { add: old.add + (Number(a) || 0), del: old.del + (Number(d) || 0), binary: a === "-" };
+  let oid = null, branch = "";
+  const entries = [];
+  for (const entry of status.stdout.split("\0")) {
+    if (!entry) continue;
+    if (entry.startsWith("# branch.oid ")) { const v = entry.slice(13); oid = v === "(initial)" ? null : v; continue; }
+    if (entry.startsWith("# branch.head ")) { const v = entry.slice(14); branch = v === "(detached)" ? "" : v; continue; }
+    if (entry[0] === "#" || entry[0] === "!") continue;
+    // "1 XY sub mH mI mW hH hI path", "u XY sub m1 m2 m3 mW h1 h2 h3 path", "? path".
+    if (entry[0] === "?") { entries.push({ xy: "??", path: entry.slice(2) }); continue; }
+    const skip = entry[0] === "u" ? 10 : entry[0] === "1" ? 8 : -1;
+    if (skip < 0) continue;
+    const parts = entry.split(" ");
+    entries.push({ xy: parts[1].replace(/\./g, " "), path: parts.slice(skip).join(" ") });
+  }
+  const hasHead = Boolean(oid), stats = {};
+  if (entries.length) {
+    const results = hasHead ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])] : [await git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), await git(["diff", "--numstat", "-z", "--no-renames"])];
+    for (const result of results) {
+      if (result.code !== 0) throw new Error(result.stderr);
+      for (const entry of result.stdout.split("\0")) {
+        const [a, d, ...parts] = entry.split("\t");
+        if (!parts.length) continue;
+        const path = parts.join("\t"), old = stats[path] ?? { add: 0, del: 0 };
+        stats[path] = { add: old.add + (Number(a) || 0), del: old.del + (Number(d) || 0), binary: a === "-" };
+      }
     }
   }
   // Commits on this branch that its base (origin's default branch) doesn't have: what a pull request would hold.
-  const name0 = branch?.code === 0 ? branch.stdout.trim() : "";
-  const base = hasHead && name0 ? await defaultBranch(root, on) : null;
-  const ahead = base && name0 !== base ? Number((await git(["rev-list", "--count", `refs/remotes/origin/${base}..HEAD`]).catch(() => null))?.stdout.trim()) || 0 : 0;
-  const files = [], entries = status.stdout.split("\0").filter(Boolean);
-  for (const entry of entries.slice(0, MAX_FILES)) {
-    const xy = entry.slice(0, 2), path = entry.slice(3), fresh = xy === "??";
-    const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
+  const base = hasHead && branch ? await baseOf(root, on) : null;
+  const ahead = base && branch !== base ? await aheadOf(root, on, oid, base) : 0;
+  const files = [];
+  for (const { xy, path } of entries.slice(0, MAX_FILES)) {
+    const fresh = xy === "??", conflict = xy.includes("U") || xy === "AA" || xy === "DD";
     const s = conflict ? "U" : xy.includes("D") ? "D" : fresh || xy.includes("A") ? "A" : "M";
     files.push({ path, status: s, fresh, stagedDeletion: xy === "D ", ...(stats[path] ?? { add: 0, del: 0 }) });
   }
-  return { root, name, on, hasHead, files, limited: entries.length > MAX_FILES, branch: name0, base, ahead };
+  return { root, name, on, hasHead, files, limited: entries.length > MAX_FILES, branch, base, ahead };
 }
 
 // Runs `fn` over `items`, `n` at a time, in order.
@@ -89,7 +125,7 @@ export class Changes {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.refresh(cx);
-    cx.timer.every(10000, (cx) => this.refresh(cx));
+    cx.timer.every(10000, (cx) => { if (!this.multi || Date.now() - (this.fullAt ?? 0) >= FULL_MS) this.refresh(cx); });
   }
 
   // One watch per repository on this computer (remote folders refresh on the timer).
@@ -103,33 +139,36 @@ export class Changes {
         try {
           while (this.watching === set && set.has(root) && this.context === context) {
             await watchFolder(root);
-            if (this.watching === set && this.context === context) this.later(cx);
+            if (this.watching === set && this.context === context) this.later(cx, root);
           }
         } catch { set.delete(root); }
       });
     }
   }
 
-  // A save storm wakes the watch once per file. Fold that into one refresh.
-  later(cx) {
-    this.queued = true;
+  // A save storm wakes the watch once per file. Fold that into one refresh,
+  // of only the repositories that changed when it came from their watches.
+  later(cx, root) {
+    if (root) (this.touched ??= new Set()).add(root); else this.queued = true;
     if (this.armed) return;
     this.armed = cx.timer.after(400, (cx) => {
       this.armed = null;
-      if (!this.queued) return;
+      if (!this.queued && !this.touched?.size) return;
       if (this.loading || this.busy) { this.later(cx); return; }
-      this.queued = false;
-      this.refresh(cx);
+      const only = this.queued || !this.multi ? null : [...this.touched];
+      this.queued = false; this.touched = null;
+      this.refresh(cx, only);
     });
   }
 
   reset() {
     this.repos = []; this.multi = false; this.filter = null; this.collapsed = new Set(); this.scan = null; this.open = null; this.closed = false;
     this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.clean = 0; this.prUrl = null;
-    this.watching = new Set();
+    this.watching = new Set(); this.fullAt = 0; this.touched = null;
   }
 
-  refresh(cx) {
+  // `only`: roots to read again (from their watches); the rest keep what they had.
+  refresh(cx, only = null) {
     if (!isShown(this.id)) { this.stale = true; return; }
     this.stale = false;
     if (this.loading || this.busy) { this.later(cx); return; }
@@ -152,8 +191,13 @@ export class Changes {
           if (key() !== context) return;
           if (!this.scan.names.length) { this.clear("Not a git repository, and none in the folders below"); return; }
           multi = true;
-          repos = await pool(this.scan.names, 6, (name) => readRepo(`${cwd}/${name}`, name, on)
-            .catch((e) => ({ root: `${cwd}/${name}`, name, on, files: [], branch: "", error: String(e?.message ?? e) })));
+          const had = new Map(this.multi ? this.repos.map((r) => [r.root, r]) : []), full = !only;
+          repos = await pool(this.scan.names, 8, (name) => {
+            const root = `${cwd}/${name}`;
+            if (!full && had.has(root) && !only.includes(root)) return had.get(root);
+            return readRepo(root, name, on).catch((e) => ({ root, name, on, files: [], branch: "", error: String(e?.message ?? e) }));
+          });
+          if (full) this.fullAt = Date.now();
         }
         if (key() !== context) return;
         this.repos = repos; this.multi = multi; this.on = on; this.error = null;

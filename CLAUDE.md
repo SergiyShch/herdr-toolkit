@@ -34,7 +34,13 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - **Single repository:** the original Herdr/Kanso behaviour.
 - **Folder that isn't a repository** (`changes.nested`):
   - `findRepos` runs `find` up to `changes.scanDepth` deep. It skips hidden folders and `node_modules`, `vendor`, `dist`, `build`, `target`, `Pods`, as well as repos nested in a found repo.
-  - It rescans every 30 s, caps at `changes.maxRepos`, and never scans `~` or `/`.
+  - It rescans every 30 s and never scans `~` or `/`.
+  - It caps at `changes.maxRepos` (default 100). `~/Documents/work/GitHub/mumzworld` holds 55 repos.
+  - **Git calls are expensive.** Each one costs about 80 ms through macOS's `/usr/bin/git` (Xcode shim), so the number of calls matters more than what they do:
+    - `readRepo` makes one `git status --porcelain=v2 --branch` call, which also gives the branch and HEAD. `diff --numstat` runs only for a dirty repo.
+    - `baseOf` caches each repo's base for 5 min; `aheadOf` caches the ahead count per HEAD.
+    - A watch event re-reads only its own repo. The 10 s timer does a full multi-repo read at most every 30 s.
+    - On 54 repos that is 2.4 s per refresh, down from 9.4 s.
   - `readRepo` returns `{ root, name, files, branch, base, ahead }`. `target()` picks the repo for Commit and Create PR: the filter chip, else the repo of the open diff.
 - **Create PR** (`createPr` in `lib.js`, also used by the PR panel):
   - Pushes the branch (`-u origin HEAD` on the first push), then runs `gh pr create --fill [--draft] --head <branch>`.

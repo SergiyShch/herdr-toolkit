@@ -62,7 +62,7 @@ export const DEFAULTS = {
     createPr: true,          // Create PR beside Commit: push the branch and gh pr create --fill
     nested: true,            // a folder that is not a repository: the repositories inside it, one section each
     scanDepth: 2,            // how many folders deep to look for them (1-5)
-    maxRepos: 40,
+    maxRepos: 100,           // at most this many (up to 200)
   },
   // Task prompts, overriding the built-in ones. Placeholders: {number} {url}
   // {title} {head} {base}. Keys: review, describe, explain, feedback,
