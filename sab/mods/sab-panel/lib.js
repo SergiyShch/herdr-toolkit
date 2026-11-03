@@ -6,11 +6,11 @@
 // alive, so each one checks `isShown(id)` before it reads git or GitHub.
 import { div, svg } from "gpui-kit";
 import { EditorState, TextView, Button, Popover, v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared } from "herdr";
+import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared, openOverlay } from "herdr";
 import { cfg, setSetting } from "./config.js";
 import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
 export { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
-export { cfg, prompt } from "./config.js";
+export { cfg, prompt, jiraKey, jiraUrl } from "./config.js";
 
 export const ICON = "mods/sab-panel/icons/";
 
@@ -143,19 +143,22 @@ export function setRepoAccount(repo, login) {
   return setSetting("github.repos", repos);
 }
 
-// The account switch in the PR and Issues panels' headers: which login reads this
-// repository, a menu to pin another one (or go back to automatic), add one, or
-// make one gh's active account. `p` is the panel: it has account, ghRepo, pinned,
-// on, and reload(cx).
+// The account menu in the PR and Issues panels' headers: which gh login reads
+// this repository. Picking one pins the repository to it; Automatic removes the
+// pin. Making a login gh's active one lives in settings → GitHub. `p` is the
+// panel: it has account, ghRepo, pinned, on, logins and reload(cx).
 export function accountPicker(p, c, prefix) {
   const id = `${prefix}-gh`, list = p.logins ?? [];
   const active = list.find((l) => l.active)?.login;
   const who = p.account || active || "gh";
-  const trigger = Button.new(`${id}-trigger`).h(26).px(8).gap(5).flex_none().items_center().rounded(6).cursor_pointer()
-    .accessibility_label(`GitHub account: ${who}`).tooltip(p.pinned ? `gh as ${who}, pinned. Click to change.` : `gh as ${who}. Click to change.`)
+  const avatar = (login, size = 18) => div().size(size).flex_none().flex().items_center().justify_center().rounded_full()
+    .bg(c.subtle).border_1().border_color(c.border).text_size(size * 0.5).text_color(c.muted).child((login[0] ?? "?").toUpperCase());
+  const trigger = Button.new(`${id}-trigger`).h(26).pl(4).pr(6).gap(6).flex_none().items_center().rounded(13).cursor_pointer()
+    .border_1().border_color(p.accountOpen ? c.border : "#00000000")
+    .accessibility_label(`GitHub account: ${who}`).tooltip(`Reading GitHub as ${who}${p.pinned ? " (pinned)" : ""}`)
     .hover((s) => s.bg(c.subtle))
-    .child(svg(`${ICON}github.svg`).size(13).text_color(c.muted))
-    .child(div().max_w(110).truncate().text_size(11.5).text_color(c.muted).child(who))
+    .child(avatar(who))
+    .child(div().max_w(110).truncate().text_size(12).text_color(c.text).child(who))
     .child(svg(`${ICON}chevron-down.svg`).size(11).text_color(c.dim));
   const popover = Popover.new(id).trigger(trigger).anchor("top_right").open(Boolean(p.accountOpen))
     .on_open_change((open, cx) => {
@@ -163,35 +166,39 @@ export function accountPicker(p, c, prefix) {
       if (open) cx.spawn(async (cx) => { p.logins = await ghLogins(p.on, true); cx.notify(); });
     });
   if (!p.accountOpen) return popover;
+  const repo = p.ghRepo ? `${p.ghRepo.owner}/${p.ghRepo.name}` : null;
+  const close = (cx) => { p.accountOpen = false; cx.notify(); };
   const pick = (login, cx) => {
-    p.accountOpen = false; cx.notify();
+    close(cx);
     setRepoAccount(p.ghRepo, login).then(() => { if (!login && p.root) forgetGhAccount(p.root, p.on, p.ghRepo); })
       .catch((e) => notify({ title: "Could not save the account", body: String(e?.message ?? e), level: "error" }))
       .finally(() => cx.spawn(async (cx) => p.reload(cx)));
   };
-  const item = (key, label, note, checked, onClick, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(G.sm).items_center().rounded(6).cursor_pointer()
-    .disabled(disabled).hover((s) => s.bg(c.subtle)).accessibility_label(label)
-    .on_click((_e, cx) => onClick(cx))
-    .child(h_flex().flex_1().min_w(0).gap(6)
-      .child(div().flex_none().text_size(12).text_color(disabled ? c.dim : c.text).child(label))
-      .when(Boolean(note), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(c.dim).child(note))))
+  // One choice: a check column, then what it is and a quiet second line.
+  const choice = (key, lead, title, sub, checked, onClick, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6)
+    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle))).when(disabled, (el) => el.opacity(0.5))
+    .accessibility_label(title).on_click((_e, cx) => { if (!disabled) onClick(cx); })
+    .child(lead)
+    .child(v_flex().flex_1().min_w(0).gap(1)
+      .child(div().truncate().text_size(12.5).text_color(c.text).child(title))
+      .when(Boolean(sub), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(sub))))
     .child(div().w(14).flex_none().text_size(12).text_color(c.text).child(checked ? "✓" : ""));
-  const repo = p.ghRepo ? `${p.ghRepo.owner}/${p.ghRepo.name}` : null;
-  const space = spaces().find((s) => s.active)?.id;
-  return popover.content(v_flex().w(268).p(G.xs).gap(2).rounded(8).bg(c.popover).border_1().border_color(c.border)
-    .child(div().px(8).pt(6).pb(4).text_size(11).text_color(c.dim).child(repo ? `Read ${repo} as` : "Read GitHub as"))
-    .child(item("auto", "Automatic", "the first that can see it", !p.pinned, (cx) => pick(null, cx), !repo))
-    .children(list.map((l, i) => item(`l${i}`, l.login, [l.active ? "active" : null, l.ok ? null : "login broken", l.host !== "github.com" ? l.host : null].filter(Boolean).join(" · "),
-      p.pinned && p.account === l.login, (cx) => pick(l.login, cx), !repo || !l.ok)))
+  const action = (key, icon, title, onClick) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6).cursor_pointer()
+    .hover((s) => s.bg(c.subtle)).accessibility_label(title).on_click((_e, cx) => onClick(cx))
+    .child(div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}${icon}.svg`).size(13).text_color(c.muted)))
+    .child(div().flex_1().text_size(12.5).text_color(c.text).child(title));
+  const found = !p.pinned ? (p.account || active) : null;
+  return popover.content(v_flex().w(260).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
+    .child(div().px(8).pt(6).pb(6).text_size(11).text_color(c.dim).truncate().child(repo ? `GitHub account for ${repo}` : "GitHub account"))
+    .child(choice("auto", div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}refresh.svg`).size(13).text_color(c.muted)),
+      "Automatic", found ? `uses ${found}, the first that can see it` : "the first account that can see it", !p.pinned, (cx) => pick(null, cx), !repo))
+    .children(list.map((l, i) => choice(`l${i}`, avatar(l.login), l.login,
+      [l.active ? "gh's active account" : null, l.host !== "github.com" ? l.host : null, l.ok ? null : "login broken"].filter(Boolean).join(" · ") || null,
+      Boolean(p.pinned) && p.account === l.login, (cx) => pick(l.login, cx), !repo || !l.ok)))
     .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(11.5).text_color(c.dim).child(p.logins ? "gh is logged in to no account." : "Reading gh auth status…")))
-    .child(div().my(4).h(1).bg(c.border))
-    .children(list.filter((l) => !l.active && l.ok).map((l, i) => item(`sw${i}`, `Make ${l.login} active`, "for gh everywhere", false, (cx) => {
-      p.accountOpen = false; cx.notify();
-      switchGhAccount(l.login, l.host, p.on).then(() => notify({ title: `gh now uses ${l.login}`, body: "Your terminals' gh commands use it too." }))
-        .catch((e) => notify({ title: "Could not switch gh account", body: String(e?.message ?? e), level: "error" }))
-        .finally(() => cx.spawn(async (cx) => p.reload(cx)));
-    })))
-    .child(item("add", "Add an account…", "gh auth login, in a new tab", false, (cx) => { p.accountOpen = false; cx.notify(); addGhAccount(space); })));
+    .child(div().mx(8).my(4).h(1).bg(c.border))
+    .child(action("add", "plus", "Add an account…", (cx) => { close(cx); addGhAccount(spaces().find((s) => s.active)?.id); }))
+    .child(action("settings", "settings", "Account settings…", (cx) => { close(cx); openOverlay({ mod: "sab-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); })));
 }
 
 // Forget the account found for a repository (after it stopped working).

@@ -22,16 +22,16 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraKey, jiraUrl } from "./lib.js";
 
-const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
+const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,comments,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
 // T3 Code's candidate reads: assignableUsers is GitHub's own picker list (everyone with access),
 // which, unlike `collaborators`, does not need push access to read.
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
 // Every open pull request of this repository, by anyone: the list a click picks from.
-const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,statusCheckRollup,additions,deletions";
+const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,statusCheckRollup,additions,deletions,labels,comments";
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
@@ -80,6 +80,15 @@ const PROMPTS = {
 const TASK_NAMES = { review: "Review", describe: "Describe", explain: "Explain", feedback: "Feedback", conflicts: "Conflicts" };
 
 /** A text-only action, as Spend draws choices that should not compete with the numbers. */
+// A label in its own color, as GitHub draws it.
+function labelChip(l, c, small = false) {
+  const color = labelColor(l.color) ?? c.dim;
+  return h_flex().h(small ? 20 : 22).px(small ? 7 : 8).gap(5).items_center().rounded(6).bg(color + "26")
+    .child(div().size(6).rounded_full().bg(color))
+    .child(div().max_w(small ? 140 : 160).truncate().text_size(small ? 11 : 11.5).text_color(c.text).child(l.name));
+}
+const visible = (list) => (list ?? []).filter((x) => !x.isMinimized);
+
 function quietLink(id, label, onClick, c, options = {}) {
   const disabled = Boolean(options.disabled);
   return Button.new(id).h(24).items_center().cursor_pointer()
@@ -93,7 +102,7 @@ function quietLink(id, label, onClick, c, options = {}) {
 export class PullRequest {
   init(cx) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
-    this.expanded = { checks: false, files: false, body: false }; this.width = 368;
+    this.expanded = { checks: false, files: false, body: false, comments: false }; this.width = 368;
     this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
     this.fallback = false; // shown: the newest, as the branch has none
     this.listing = false; // the page of open ones instead of the one shown
@@ -450,7 +459,8 @@ export class PullRequest {
     let n = 0;
     const row = (p) => {
       const on = p.url === shown, state = this.rowState(p, c), i = n++;
-      const meta = [`#${p.number}`, mine(p) ? "you" : p.author?.login, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(" · ");
+      const talk = visible(p.comments).length;
+      const meta = [`#${p.number}`, mine(p) ? "you" : p.author?.login, `updated ${ago(p.updatedAt)}`, talk ? `${talk} comment${talk > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ");
       return Button.new(`pr-open-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
         .selected(on)
         .when(on, (el) => el.bg(c.selected))
@@ -463,6 +473,7 @@ export class PullRequest {
             .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown")))
             .when(cfg().pr.rowActions, (el) => el.child(this.iconButton(`pr-open-web-${i}`, "external", "Open in browser", (cx) => { cx.stop_propagation(); openUrl(p.url); }, c))))
           .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
+          .when((p.labels ?? []).length > 0, (el) => el.child(h_flex().w_full().flex_wrap().gap(6).children(p.labels.slice(0, 5).map((l) => labelChip(l, c, true)))))
           .child(h_flex().w_full().gap(G.sm).items_center()
             .child(div().size(6).flex_none().rounded_full().bg(state.color))
             .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
@@ -561,6 +572,7 @@ export class PullRequest {
       { value: `+${pr.additions}`, unit: "added" },
       { value: `−${pr.deletions}`, unit: "removed" },
       { value: String(this.threads.length), unit: this.threads.length === 1 ? "thread" : "threads" },
+      { value: String(visible(pr.comments).length), unit: visible(pr.comments).length === 1 ? "comment" : "comments" },
       { value: String(checks.length), unit: checks.length === 1 ? "check" : "checks" },
     ];
     const primary = Button.new("pr-merge").h(30).px(14).flex_none().items_center().rounded(6)
@@ -577,7 +589,8 @@ export class PullRequest {
         .child(h_flex().pt(G.xs).gap(G.sm).items_center()
           .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
           .child(div().text_size(15).text_color(c.text).child(v.text)))
-        .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · "))))
+        .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · ")))
+        .child(this.tags(c)))
       .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
         .children(stats.map((s) => h_flex().items_end().gap(6)
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
@@ -590,6 +603,41 @@ export class PullRequest {
         .child(quietLink("pr-close", "Close", (cx) => this.act("Close", ["pr", "close", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
       .when(pr.state === "CLOSED", (el) => el.child(h_flex().child(quietLink("pr-reopen", "Reopen", (cx) => this.act("Reopen", ["pr", "reopen", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
+  }
+
+  // Labels (with their picker) and the Jira ticket the title or branch names.
+  tags(c) {
+    const pr = this.pr, key = jiraKey(pr.title) ?? jiraKey(pr.headRefName), jira = jiraUrl(key);
+    return h_flex().w_full().pt(G.sm).flex_wrap().gap(6).items_center()
+      .when(Boolean(jira), (el) => el.child(Button.new("pr-jira").h(22).px(8).gap(5).items_center().rounded(6).cursor_pointer()
+        .border_1().border_color(c.border).hover((s) => s.bg(c.subtle)).tooltip(`Open ${key} in Jira`)
+        .on_click(() => openUrl(jira))
+        .child(svg(`${ICON}ticket.svg`).size(12).text_color(c.muted))
+        .child(div().text_size(11.5).text_color(c.text).child(key))))
+      .children((pr.labels ?? []).map((l) => labelChip(l, c)))
+      .when(!(pr.labels ?? []).length && !jira, (el) => el.child(div().text_size(12).text_color(c.dim).child("No labels")))
+      .when(pr.state === "OPEN", (el) => el.child(this.pickerFor("labels", c)));
+  }
+
+  // The conversation: comments on the pull request itself, the newest last.
+  comments(c) {
+    const all = visible(this.pr.comments), open = this.expanded.comments;
+    const list = open ? all : all.slice(-5);
+    return v_flex().w_full()
+      .child(this.section(c, "Comments", String(all.length)))
+      .when(all.length > list.length, (el) => el.child(h_flex().pb(G.sm).child(quietLink("pr-comments-more", `Show ${all.length - list.length} earlier`, (cx) => { this.expanded.comments = true; cx.notify(); }, c))))
+      .children(list.map((m, i) => {
+        const body = String(m.body ?? "").replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ").trim();
+        return Button.new(`pr-comment-${i}`).w_full().py(8).cursor_pointer()
+          .when(i > 0, (el) => el.border_t(1).border_color(c.border))
+          .hover((s) => s.opacity(0.75)).tooltip("Open on GitHub")
+          .on_click(() => { if (m.url) openUrl(m.url); })
+          .child(v_flex().w_full().gap(3)
+            .child(h_flex().gap(G.sm).items_center()
+              .child(div().text_size(12).text_color(c.text).child(m.author?.login === this.viewer ? "you" : m.author?.login ?? "someone"))
+              .child(div().text_size(11).text_color(c.dim).child(ago(m.createdAt))))
+            .child(div().w_full().text_size(13).line_height(1.45).text_color(c.muted).child(body.length > 280 ? body.slice(0, 280) + "…" : body || "(empty)")));
+      }));
   }
 
   // The description, as GitHub renders it: Markdown, folded to a few lines when long.
@@ -625,21 +673,13 @@ export class PullRequest {
     const outcome = { APPROVED: ["approved", c.green], CHANGES_REQUESTED: ["changes", c.red], COMMENTED: ["commented", null], DISMISSED: ["dismissed", null] };
     const reviewed = (pr.latestReviews ?? []).filter((r) => r.author?.login).map((r) => person(r.author.login, outcome[r.state]?.[0] ?? String(r.state).toLowerCase(), outcome[r.state]?.[1]));
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
-    // Labels in their own color, as T3 Code's label chips.
-    const labels = (pr.labels ?? []).map((l) => {
-      const color = labelColor(l.color) ?? c.dim;
-      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(color + "26")
-        .child(div().size(6).rounded_full().bg(color))
-        .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
-    });
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
     return v_flex().w_full()
-      .child(this.section(c, "People and labels", decision))
+      .child(this.section(c, "People", decision))
       .child(v_flex().w_full().gap(G.xs)
         .child(metaRow("Assignees", assignees, open ? this.pickerFor("assignees", c) : null,
           open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: Boolean(this.pending) }) : null))
-        .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null))
-        .child(metaRow("Labels", labels, open ? this.pickerFor("labels", c) : null)));
+        .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null)));
   }
 
   checksList(c) {
@@ -762,6 +802,7 @@ export class PullRequest {
         .when(show.people, (el) => el.child(this.people(c)))
         .when(show.checks && this.checks().length > 0, (el) => el.child(this.checksList(c)))
         .when(show.threads && this.threads.length > 0, (el) => el.child(this.discussion(c)))
+        .when(show.comments !== false && visible(this.pr.comments).length > 0, (el) => el.child(this.comments(c)))
         .when(show.agent && anyTask, (el) => el.child(this.agent(c)))
         .when(show.files, (el) => el.child(this.files(c)))
         .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.account ? ` as ${this.account}` : ""}${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every ${cfg().pr.refreshSeconds} s while shown, every 20 s while a check runs.`));

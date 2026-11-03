@@ -20,7 +20,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, layout, settings, exec, focused, nextCommand } from "herdr";
 import { ClaudeContext, cleanTitle } from "./context.js";
-import { cfg, readSettings, SHARED_KEY } from "./config.js";
+import { cfg, readSettings, SHARED_KEY, jiraKey, jiraUrl } from "./config.js";
 import { shared, setShared, notify } from "herdr";
 
 const ICON = "mods/sab-panel/icons/";
@@ -48,8 +48,8 @@ function find(node, id) {
 // with or names ("123-fix", "fix/123-login", "issue-123").
 export function issueKey(text, { jira = true, github = true } = {}) {
   const s = String(text ?? "");
-  const j = jira && /(?:^|[^A-Za-z0-9])([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![A-Za-z0-9])/.exec(s);
-  if (j) return j[1];
+  const j = jira && jiraKey(s);
+  if (j) return j;
   const gh = github && /(?:^|\/)(?:issue-|issues-|gh-)?(\d{1,6})(?=[-_]|$)/i.exec(s);
   return gh ? `#${gh[1]}` : null;
 }
@@ -69,6 +69,12 @@ export function autoName(tab, tabPanes, o = cfg().tabs) {
   const usable = title && !GENERIC.test(title) && title !== first?.program?.name ? title : null;
   const name = key ?? usable ?? first?.program?.name ?? "Terminal";
   return { name, full: [key, usable].filter(Boolean).join(" · ") || name };
+}
+
+// The Jira ticket a tab is about: from its name, its branch or its folder.
+export function tabJira(tab, tabPanes) {
+  const first = tabPanes.find((p) => p.program?.agent) ?? tabPanes.find((p) => p.terminal) ?? tabPanes[0];
+  return jiraKey(tab.named ? tab.name : "") ?? jiraKey(first?.branch) ?? jiraKey(first?.cwd?.split(/[\\/]/).pop());
 }
 
 const isClaude = (p) => p?.app === "claude-code" || p?.program?.key === "claude";
@@ -110,6 +116,7 @@ export default class Tabs extends View {
         const c = await nextCommand();
         if (c === "gcloud-login") this.gcloudLogin();
         if (c === "gcloud-refresh") this.gcloudRefresh(cx, true);
+        if (c === "jira-open") this.openJira();
         cx.notify();
       }
     });
@@ -163,6 +170,14 @@ export default class Tabs extends View {
         this.gcloud = next; this.gcloudBusy = false; cx.notify();
       }
     });
+  }
+
+  // Opens the focused tab's Jira ticket (cmd-alt-j).
+  openJira() {
+    const space = spaces().find((s) => s.active), tab = space?.tabs?.find((t) => t.active);
+    const key = tab ? tabJira(tab, panes().filter((p) => p.tab === tab.id)) : null, url = jiraUrl(key);
+    if (url) exec("open", [url]).catch(() => {});
+    else notify({ title: key ? "No Jira site set" : "No Jira key on this tab", body: key ? "Set it in herdr-sab settings → Tab bar → Jira site." : "The tab's name, branch or folder carries none (like DS-1234)." });
   }
 
   gcloudLogin() {
@@ -262,11 +277,12 @@ export default class Tabs extends View {
       const tabPanes = allPanes.filter((p) => p.tab === c.id);
       const program = tabPanes.find((p) => p.program?.agent)?.program ?? tabPanes[0]?.program;
       const { name, full } = autoName(c, tabPanes);
+      const jira = jiraUrl(tabJira(c, tabPanes)), jk = jira ? tabJira(c, tabPanes) : null;
       const working = c.status === "working";
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
         .hover((s) => s.bg(t.hover))
-        .tooltip(c.named ? full : `${full}\nDouble-click to name it`)
+        .tooltip([full, c.named ? null : "Double-click to name it", jk ? `${jk} in Jira: ⌘⌥J` : null].filter(Boolean).join("\n"))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -279,6 +295,10 @@ export default class Tabs extends View {
         .when(working, (el) => el.child(div().size(6).flex_none().rounded_full().bg(t.working).loop("opacity", { from: 0.3, to: 1, period: 1400 })))
         .when(c.status === "blocked" || c.status === "done", (el) => el.child(div().size(6).flex_none().rounded_full().bg(t[c.status])))
         .when(true, (el) => { const chip = this.contextChip(c, tabPanes, claudePanes, t); return chip ? el.child(chip) : el; })
+        .when(Boolean(jira) && c.active, (el) => el.child(div().id(`jira-${c.id}`).size(18).flex_none().flex().items_center().justify_center().rounded(4)
+          .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(`Open ${jk} in Jira  ⌘⌥J`)
+          .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); exec("open", [jira]).catch(() => {}); })
+          .child(svg(`${ICON}ticket.svg`).size(13))))
         .when(c.active && shown.length > 1, (el) => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg(`${ICON}close.svg`).size(12))));
     };
@@ -305,11 +325,11 @@ export default class Tabs extends View {
         }).when(!labels, (el) => el.tooltip(label)).child(svg(`${ICON}${icon}.svg`).size(14)).when(labels, (el) => el.child(label));
     };
     const hasPane = Boolean(focused()?.cwd || allPanes.some((p) => p.focused && p.cwd));
-    const editor = div().id("open-editor").size(26).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_color(hasPane ? t.muted : t.dim).tooltip("Open in editor  ⌘⇧O")
+    const editor = h_flex().id("open-editor").h(26).px(8).gap(5).flex_none().items_center().rounded(6).text_size(12)
+      .text_color(hasPane ? t.muted : t.dim).tooltip("Open the pane's folder in an editor  ⌘⇧O")
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => openOverlay({ mod: "sab-open-with", kind: "popup", at: "top", width: 380 }))
-      .child(svg(`${ICON}open-with.svg`).size(15));
+      .child(svg(`${ICON}code.svg`).size(14)).when(labels, (el) => el.child("Editor"));
     const sep = () => div().w(1).h(16).mx(4).flex_none().bg(t.border);
     const gcloud = this.gcloudChip(t, stop);
 

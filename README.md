@@ -13,13 +13,14 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 ## What you get
 
 - **A right side panel** with **Files**, **Changes**, **Pull requests** and **Issues**. It follows the pane you're in, so each session sees its own repository.
-  - **PR**: every open pull request, with checks, unresolved threads, reviewers, labels, files and diffs, and merge. One click hands your agent a **Code review**, **Describe change**, **Explain**, **Address feedback** or **Resolve conflicts** task in a new tab.
-  - **Issues**: the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
-  - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. A gh menu in the panel header switches the account per repository, makes another one `gh`'s active account, or adds one.
-- **Tabs that name themselves.** An unnamed tab shows the issue key its branch carries (`WEB-142`, `#123`) or its agent's own title. A name you type always wins.
+  - **PR**: every open pull request, with labels, comments, checks, unresolved threads, reviewers, files and diffs, and merge. One click hands your agent a **Code review**, **Describe change**, **Explain**, **Address feedback** or **Resolve conflicts** task in a new tab.
+  - **Issues** (off by default): the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
+  - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. The account menu in the panel header switches it per repository or adds one.
+- **Tabs that name themselves.** An unnamed tab shows the Jira key its branch carries (`DS-1234`) or its agent's own title. A name you type always wins.
+- **Jira one key away.** Set your site (`https://mumz.atlassian.net`) and `⌘⌥J`, or the ticket button on the tab, opens `…/browse/DS-1234`. The PR panel links it too.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
 - **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.
-- **Your editor, one key away.** `⌘⇧O` or the tab bar button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
+- **Your editor, one key away.** `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
 - **Settings for all of it.** **herdr-sab settings** sits under Herdr's own **Settings** in the sidebar. Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/sab.json`.
 
 ## Install
@@ -30,7 +31,7 @@ You need the Herdr desktop app, `git`, `python3`, and the [GitHub CLI](https://c
 git clone https://github.com/thabti/herdr-sab
 cd herdr-sab
 scripts/install.sh --dry-run     # shows what it will copy; changes nothing
-scripts/install.sh               # copies the layout and 5 mods, adds 3 keys, runs herdr-app check
+scripts/install.sh               # copies the layout and 5 mods, adds 4 keys, runs herdr-app check
 herdr-app do layout.switch --name sab
 ```
 
@@ -45,6 +46,7 @@ and it leaves keys you already use alone.
 | `⌘⇧O` | Open the focused pane's folder in an editor |
 | `⌘⌥,` | herdr-sab settings |
 | `⌘⌥G` | `gcloud auth login` in a new tab |
+| `⌘⌥J` | Open the tab's Jira ticket |
 | Double-click a tab, or `F2` | Name it (empty: back to the automatic name) |
 
 ## What it runs

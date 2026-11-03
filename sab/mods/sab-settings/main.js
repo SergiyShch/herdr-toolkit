@@ -10,33 +10,25 @@
 // every ~3 s). Task prompts live only in the file (`prompts`).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, Input, InputState } from "gpui-base";
-import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run, shared, setShared } from "herdr";
+import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run } from "herdr";
 import { cfg, get, setSetting, resetSettings, DEFAULTS, SETTINGS_FILE } from "./config.js";
-import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
+import { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
 
 const ICON = "mods/sab-panel/icons/";
 const SECTIONS = [
   { id: "tabs", title: "Tab bar", icon: `${ICON}sidebar.svg` },
-  { id: "panels", title: "Side panels", icon: `${ICON}file.svg` },
-  { id: "context", title: "Claude context", icon: `${ICON}chart.svg` },
-  { id: "gcloud", title: "gcloud", icon: "icons/gcloud.svg" },
+  { id: "panels", title: "Panels", icon: `${ICON}file.svg` },
   { id: "github", title: "GitHub", icon: `${ICON}github.svg` },
   { id: "agent", title: "Agent tasks", icon: `${ICON}agent.svg` },
-  { id: "pr", title: "Pull requests", icon: `${ICON}pull-request.svg` },
-  { id: "issues", title: "Issues", icon: `${ICON}issue.svg` },
+  { id: "context", title: "Claude context", icon: `${ICON}chart.svg` },
+  { id: "gcloud", title: "gcloud", icon: "icons/gcloud.svg" },
 ];
 
 // Lists typed as text: comma separated paths, space separated args.
 const LISTS = {
   "context.cacheRoots": { split: (v) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), join: (a) => a.join(", "), placeholder: "~/.harp, ~/.local/state/…" },
   "gcloud.loginArgs": { split: (v) => v.trim().split(/\s+/).filter(Boolean), join: (a) => a.join(" "), placeholder: "auth login" },
-  // owner=login pairs, comma separated.
-  "github.accounts": {
-    split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o && l)),
-    join: (o) => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join(", "),
-    placeholder: "my-org=my-login, other-org=work-login",
-    empty: {},
-  },
+  "jira.baseUrl": { split: (v) => v.trim(), join: (v) => v ?? "", placeholder: "https://your-site.atlassian.net", empty: "" },
   // owner/name=login pairs; the panels' account menu writes these too.
   "github.repos": {
     split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o.includes("/") && l)),
@@ -159,65 +151,80 @@ export default class Settings extends View {
     return this.row(t, title, about, control, disabled);
   }
 
+  // Several on/off settings as one row of chips: each click flips one.
+  chips(t, title, about, items, disabled = false) {
+    const control = h_flex().flex_wrap().justify_end().gap(6).max_w(340)
+      .children(items.map(([path, label]) => {
+        const on = get(path) !== false;
+        return div().id(`set-${path}`).px(10).py(4).rounded(14).cursor_pointer().text_size(12.5)
+          .border_1().border_color(on ? t.accent : t.border).bg(on ? t.selected : t.raised)
+          .text_color(on ? t.foreground : t.muted).hover((s) => s.bg(t.hover))
+          .on_click(() => { if (!disabled) this.set(path, !on); }).child(label);
+      }));
+    return this.row(t, title, about, control, disabled);
+  }
+
   // ---- pages ----
 
   tabsPage(t, c) {
     const off = !c.tabs.autoName;
     return v_flex().w_full()
       .child(this.heading(t, "Tab names"))
-      .child(this.toggle(t, "tabs.autoName", "Name tabs automatically", "A tab you haven't named shows its issue key or its agent's title. A name you type always wins; an empty name brings the automatic one back."))
-      .child(this.toggle(t, "tabs.issueKeyJira", "Jira keys", "WEB-142 from the branch or the folder", off))
-      .child(this.toggle(t, "tabs.issueKeyGithub", "GitHub issue numbers", "#123 from a branch like 123-fix or issue-123", off))
-      .child(this.toggle(t, "tabs.agentTitle", "Agent's own title", "The title the agent gives its terminal", off))
+      .child(this.toggle(t, "tabs.autoName", "Name tabs automatically", "A tab you haven't named shows its issue key or its agent's title. A name you type always wins."))
+      .child(this.chips(t, "Use", null, [["tabs.issueKeyJira", "Jira keys"], ["tabs.issueKeyGithub", "GitHub #123"], ["tabs.agentTitle", "Agent title"]], off))
+      .child(div().h(18))
+      .child(this.heading(t, "Jira"))
+      .child(this.text(t, "jira.baseUrl", "Jira site", "A tab, branch or pull request naming DS-1234 opens <site>/browse/DS-1234. ⌘⌥J opens the tab's."))
       .child(div().h(18))
       .child(this.heading(t, "Buttons"))
-      .child(this.toggle(t, "tabs.editorButton", "Open in editor", "The button in the tab bar. Cmd+Shift+O works either way."))
-      .child(this.toggle(t, "tabs.panelLabels", "Panel button labels", "Off: icons only, with the names in tooltips"));
+      .child(this.toggle(t, "tabs.editorButton", "Open in editor", "Cmd+Shift+O works either way"))
+      .child(this.toggle(t, "tabs.panelLabels", "Labels beside icons", "Off: icons only, names in tooltips"));
   }
 
   panelsPage(t, c) {
+    const pr = !c.panels.pr;
     return v_flex().w_full()
-      .child(this.heading(t, "Shown in the tab bar"))
-      .child(this.toggle(t, "panels.files", "Files", "File tree with Markdown and code preview"))
-      .child(this.toggle(t, "panels.changes", "Changes", "git status and diffs of the focused pane's repository"))
-      .child(this.toggle(t, "panels.pr", "Pull requests", "Every open one, with checks, threads, reviewers, labels and merge. Reads GitHub with gh while shown."))
-      .child(this.toggle(t, "panels.issues", "Issues", "The repository's open issues. Reads GitHub with gh while shown."))
+      .child(this.heading(t, "In the tab bar"))
+      .child(this.chips(t, "Panels", "GitHub panels read with gh only while shown", [["panels.files", "Files"], ["panels.changes", "Changes"], ["panels.pr", "Pull requests"], ["panels.issues", "Issues"]]))
+      .child(this.toggle(t, "changes.commit", "Commit from Changes", "The message field and Commit button", !c.panels.changes))
       .child(div().h(18))
-      .child(this.heading(t, "Changes"))
-      .child(this.toggle(t, "changes.commit", "Commit from the panel", "The message field and Commit button", !c.panels.changes));
+      .child(this.heading(t, "Pull requests"))
+      .child(this.chips(t, "Sections", null, [["pr.sections.description", "Description"], ["pr.sections.people", "People"], ["pr.sections.checks", "Checks"],
+        ["pr.sections.threads", "Threads"], ["pr.sections.comments", "Comments"], ["pr.sections.agent", "Agent"], ["pr.sections.files", "Files"]], pr))
+      .child(this.choice(t, "pr.mergeMethod", "Merge with", null, [["auto", "Repo default"], ["squash", "Squash"], ["merge", "Merge"], ["rebase", "Rebase"]], pr))
+      .child(this.toggle(t, "pr.rowActions", "Actions on the open list", "Open in browser, Review and Describe on each row", pr))
+      .child(div().h(18))
+      .child(this.heading(t, "Issues"))
+      .child(this.stepper(t, "issues.limit", "Show up to", "The most recently updated open issues", { min: 25, max: 500, step: 25, disabled: !c.panels.issues }));
   }
 
   contextPage(t, c) {
     const off = !c.context.enabled;
     return v_flex().w_full()
       .child(this.heading(t, "Claude Code"))
-      .child(this.toggle(t, "context.enabled", "Show context on tabs", "How full each Claude Code conversation's context window is, from its status line"))
+      .child(this.toggle(t, "context.enabled", "Show context on tabs", "How full each Claude Code conversation's context window is, from its status line. Idle ones show dimmed."))
       .child(this.stepper(t, "context.warnAt", "Warn from", "The figure turns red at this much used", { min: 50, max: 100, step: 5, unit: "%", disabled: off }))
-      .child(this.stepper(t, "context.staleMinutes", "Dim after", "An idle agent, or a reading older than this, shows dimmed with its age in the tooltip", { min: 1, max: 120, step: 1, unit: " min", disabled: off }))
-      .child(this.text(t, "context.cacheRoots", "Snapshot folders", "Folders where your status line writes claude-statusline.json, comma separated", off));
+      .child(this.text(t, "context.cacheRoots", "Snapshot folders", "Where your status line writes claude-statusline.json, comma separated", off));
   }
 
   gcloudPage(t, c) {
     const off = !c.gcloud.enabled;
     return v_flex().w_full()
       .child(this.heading(t, "Google Cloud CLI"))
-      .child(this.toggle(t, "gcloud.enabled", "Show gcloud login", "A chip in the tab bar: green when logged in, red when not or expired; account and project in its tooltip"))
+      .child(this.toggle(t, "gcloud.enabled", "Show gcloud login", "A chip in the tab bar: green when logged in, red when not or expired"))
       .child(this.choice(t, "gcloud.label", "Chip shows", null, [["project", "Project"], ["account", "Account"], ["none", "Dot only"]], off))
-      .child(this.stepper(t, "gcloud.refreshMinutes", "Check every", null, { min: 1, max: 60, step: 1, unit: " min", disabled: off }))
-      .child(this.toggle(t, "gcloud.tokenCheck", "Check the login still works", "Asks gcloud for an access token, which catches an expired session. Uses the network.", off))
-      .child(this.stepper(t, "gcloud.tokenCheckMinutes", "Token check every", null, { min: 5, max: 120, step: 5, unit: " min", disabled: off || !c.gcloud.tokenCheck }))
+      .child(this.toggle(t, "gcloud.tokenCheck", "Catch an expired login", "Asks gcloud for an access token now and then. Uses the network.", off))
       .child(this.text(t, "gcloud.loginArgs", "Login command", "What the login button runs after gcloud, e.g. auth login --update-adc", off));
   }
 
   githubPage(t, c) {
-    const known = Object.entries(shared(ACCOUNTS) ?? {});
     const list = this.logins ?? [];
     return v_flex().w_full()
       .child(this.heading(t, "Logged in to gh"))
       .when(!this.logins, (el) => el.child(this.row(t, "Reading gh auth status…", null, div())))
       .when(Boolean(this.logins) && !list.length, (el) => el.child(this.row(t, "No account", "gh isn't logged in, or isn't installed.", div())))
       .children(list.map((l, i) => this.row(t, l.login,
-        [l.active ? "Active: what gh uses in your terminals, and the panels' first try" : "Logged in", l.host !== "github.com" ? l.host : null, l.ok ? null : "its login no longer works: add it again"].filter(Boolean).join(" · "),
+        [l.active ? "Active: what gh uses in your terminals" : null, l.host !== "github.com" ? l.host : null, l.ok ? null : "login broken: add it again"].filter(Boolean).join(" · ") || null,
         l.active ? div().px(10).text_size(12.5).text_color(t.accent).child("Active")
           : this.button(t, `set-gh-switch-${i}`, this.switching === l.login ? "Switching…" : "Make active", (_e, cx) => {
             if (this.switching) return;
@@ -225,19 +232,11 @@ export default class Settings extends View {
             switchGhAccount(l.login, l.host).catch((e) => notify({ title: "Could not switch gh account", body: String(e?.message ?? e), level: "error" }))
               .finally(() => { this.switching = null; this.readLogins(cx, true); });
           }))))
-      .child(this.row(t, "Add an account", "Runs gh auth login in a new tab. The new account becomes gh's active one; switch back here.",
-        h_flex().gap(8)
-          .child(this.button(t, "set-gh-reread", "Reread", (_e, cx) => this.readLogins(cx, true)))
-          .child(this.button(t, "set-gh-add", "Add…", () => { this.close(); addGhAccount(); }))))
+      .child(this.row(t, "Add an account", "gh auth login, in a new tab", this.button(t, "set-gh-add", "Add…", () => { this.close(); addGhAccount(); })))
       .child(div().h(18))
       .child(this.heading(t, "Which account reads a repository"))
-      .child(this.toggle(t, "github.autoAccount", "Find the right account", "The PR and Issues panels use the first account that can see each repository, active one first, and remember it"))
-      .child(this.text(t, "github.repos", "Pin by repository", "owner/name=login pairs. The gh menu in the PR and Issues panels sets these. Wins over the rest."))
-      .child(this.text(t, "github.accounts", "Pin by owner", "owner=login pairs, comma separated. A pin wins over finding."))
-      .child(this.row(t, "Remembered", known.length
-        ? known.map(([k, v]) => `${k.split("|")[1]} → ${v || "active account"}`).join(" · ")
-        : "None yet: an account is remembered the first time a repository is read",
-        this.button(t, "set-gh-forget", "Forget", () => setShared(ACCOUNTS, {})), !known.length));
+      .child(this.toggle(t, "github.autoAccount", "Find it automatically", "The PR and Issues panels use the first account that can see the repository, active one first"))
+      .child(this.text(t, "github.repos", "Pinned", "owner/name=login pairs. The account menu in the PR and Issues panels sets these."));
   }
 
   agentPage(t, c) {
@@ -247,41 +246,10 @@ export default class Settings extends View {
     return v_flex().w_full()
       .child(this.heading(t, "Agent"))
       .child(this.choice(t, "agent.prefer", "Start tasks with", "Each task opens a new tab running this agent", options))
-      .child(div().h(18))
-      .child(this.heading(t, "Tasks"))
-      .child(this.toggle(t, "pr.tasks.review", "Code review", "Pull requests: review the diff and report findings"))
-      .child(this.toggle(t, "pr.tasks.describe", "Describe change", "Pull requests: draft the description, then update it once you approve"))
-      .child(this.toggle(t, "pr.tasks.explain", "Explain it", "Pull requests: walk through what it does"))
-      .child(this.toggle(t, "pr.tasks.feedback", "Address feedback", "Pull requests: fix review threads and failing checks"))
-      .child(this.toggle(t, "pr.tasks.conflicts", "Resolve conflicts", "Pull requests: shown only when it conflicts"))
-      .child(this.toggle(t, "issues.startButton", "Start on an issue", "Issues: work on it in a tab named after the issue"))
-      .child(this.row(t, "Prompts", custom.length ? `Your own in sab.json: ${custom.join(", ")}` : "Built-in. Override any in sab.json under \"prompts\": review, describe, explain, feedback, conflicts, issue. Placeholders: {number} {url} {title} {head} {base}.",
+      .child(this.chips(t, "Tasks", "Buttons in the PR and Issues panels", [["pr.tasks.review", "Code review"], ["pr.tasks.describe", "Describe change"], ["pr.tasks.explain", "Explain"],
+        ["pr.tasks.feedback", "Address feedback"], ["pr.tasks.conflicts", "Resolve conflicts"], ["issues.startButton", "Start on issue"]]))
+      .child(this.row(t, "Prompts", custom.length ? `Your own in sab.json: ${custom.join(", ")}` : "Built-in. Override any in sab.json under \"prompts\".",
         this.button(t, "set-prompts", "Edit sab.json", () => this.openFile())));
-  }
-
-  prPage(t, c) {
-    const off = !c.panels.pr;
-    return v_flex().w_full()
-      .child(this.heading(t, "Pull request panel"))
-      .child(this.stepper(t, "pr.refreshSeconds", "Read again every", "While shown; every 20 s while a check runs", { min: 30, max: 900, step: 30, unit: " s", disabled: off }))
-      .child(this.choice(t, "pr.mergeMethod", "Merge with", null, [["auto", "Repo default"], ["squash", "Squash"], ["merge", "Merge"], ["rebase", "Rebase"]], off))
-      .child(this.toggle(t, "pr.rowActions", "Actions on the open list", "Open in browser, Review and Describe on each row", off))
-      .child(div().h(18))
-      .child(this.heading(t, "Sections"))
-      .child(this.toggle(t, "pr.sections.description", "Description", null, off))
-      .child(this.toggle(t, "pr.sections.people", "People and labels", "Assignees, reviewers and labels, with pickers", off))
-      .child(this.toggle(t, "pr.sections.checks", "Checks", null, off))
-      .child(this.toggle(t, "pr.sections.threads", "Unresolved threads", null, off))
-      .child(this.toggle(t, "pr.sections.agent", "Ask your agent", "The tasks chosen in Agent tasks", off))
-      .child(this.toggle(t, "pr.sections.files", "Files and diffs", null, off));
-  }
-
-  issuesPage(t, c) {
-    const off = !c.panels.issues;
-    return v_flex().w_full()
-      .child(this.heading(t, "Issues panel"))
-      .child(this.stepper(t, "issues.limit", "Show up to", "The most recently updated open issues", { min: 25, max: 500, step: 25, disabled: off }))
-      .child(this.stepper(t, "issues.refreshSeconds", "Read again every", "While shown", { min: 30, max: 900, step: 30, unit: " s", disabled: off }));
   }
 
   render(cx) {
@@ -317,7 +285,7 @@ export default class Settings extends View {
           .on_click(() => { this.close(); run("app.settings"); }).child("Herdr settings…")));
 
     const page = { tabs: this.tabsPage, panels: this.panelsPage, context: this.contextPage, gcloud: this.gcloudPage,
-      github: this.githubPage, agent: this.agentPage, pr: this.prPage, issues: this.issuesPage }[this.section].call(this, t, c);
+      github: this.githubPage, agent: this.agentPage }[this.section].call(this, t, c);
     const file = SETTINGS_FILE().startsWith(home()) ? "~" + SETTINGS_FILE().slice(home().length) : SETTINGS_FILE();
 
     return h_flex().id("sab-settings").track_focus(this.handle).w_full().h(620).min_h(0).items_start().bg(t.popover)

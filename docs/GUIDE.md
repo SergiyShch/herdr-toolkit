@@ -102,13 +102,14 @@ A hidden panel does no work: it doesn't run git or `gh` and catches up when you 
 
 **Several GitHub accounts.** If you're logged in to `gh` with more than one account (`gh auth status`), for example a personal one and a work one, the PR and Issues panels pick the right one **for each repository**. They try `gh`'s active account first, then each other login, and remember the first one that can see the repository. The footnote names the account used ("Read from GitHub with gh as …"). 
 
-**Switching accounts.** The PR and Issues headers have a **gh menu** showing the account in use (the GitHub mark and a login). It lists every account `gh` is logged in to:
+**Switching accounts.** The PR and Issues headers show the account in use (an initial and a login). Click it for the account menu:
 
-- **Pick a login** to read this repository with it. That pins the repository (saved as `github.repos` in `sab.json`). **Automatic** removes the pin.
-- **Make *login* active** runs `gh auth switch`, so `gh` in your terminals uses it too.
-- **Add an account…** runs `gh auth login` in a new tab. `gh` makes the new account active; switch back from the menu or settings.
+- **Automatic**: the first account that can see the repository (it says which).
+- **A login**: read this repository with it. That pins the repository (`github.repos` in `sab.json`).
+- **Add an account…** runs `gh auth login` in a new tab. `gh` makes the new account active.
+- **Account settings…** opens settings → GitHub, which lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too) and the pinned repositories.
 
-Settings → GitHub lists the same accounts with **Make active** and **Add…**, plus the repository and owner pins. A repository pin wins over an owner pin, which wins over automatic. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
+A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-org": "login"}`) still work from `sab.json`. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
 
 ### Files
 
@@ -137,12 +138,13 @@ The pull request view, top to bottom:
 
 | Section | Contents |
 |---|---|
-| Header | `#n · head → base`, title, verdict (ready to merge, conflicts, checks failing, …), author and age; files / added / removed / threads / checks counts |
+| Header | `#n · head → base`, title, verdict (ready to merge, conflicts, checks failing, …), author and age; its **labels** (with a picker) and the **Jira ticket** its title or branch names (click to open); files / added / removed / threads / comments / checks counts |
 | Actions | **Merge**: press twice within 4 s; uses the repository's allowed method, or the one you set. **Ready for review / Back to draft**, **Close** (or **Reopen**) |
 | Description | The body as Markdown, folded when long |
-| People and labels | Assignees (plus **Assign to me**), reviewers with their verdicts, and labels in their own colors. Each has a picker: search, click to add or remove |
+| People | Assignees (plus **Assign to me**) and reviewers with their verdicts. Each has a picker: search, click to add or remove |
 | Checks | Failing first; click one to open its page |
 | Unresolved threads | First comment, `path:line`, author, replies; click to open it on GitHub |
+| Comments | The conversation on the pull request: the latest 5 (**Show earlier** for the rest), author and age; click one to open it on GitHub |
 | Ask your agent | **Code review**, **Describe change**, **Explain it**, **Address feedback**, **Resolve conflicts** (only when it conflicts) |
 | Files | Changed files; click one to see its diff inline |
 
@@ -151,6 +153,8 @@ Header buttons: refresh, copy the link, open on GitHub. If the branch has no pul
 The panel rereads every 60 s while shown (configurable), and every 20 s while a check is running.
 
 ### Issues
+
+Off by default: turn it on in settings → Panels.
 
 - The repository's open issues: the 100 most recently updated by default (configurable).
 - Groups: **This branch** (its name carries the issue number), **Assigned to you**, **Opened by you**, **Everyone else**.
@@ -172,7 +176,7 @@ A tab **you haven't named** is named by the first rule that matches:
 
 1. **The issue key** in its pane's branch or folder:
    - Jira-style `WEB-142` anywhere, e.g. `feature/WEB-142-login` or `client-portal-WEB-142`.
-   - A GitHub number at the start of a branch name or a path segment: `123-fix-login`, `fix/123-login`, `issue-123`, `gh-123` → `#123`.
+   - A GitHub number at the start of a branch name or a path segment: `123-fix-login`, `fix/123-login`, `issue-123`, `gh-123` → `#123`. Off by default (settings → Tab bar).
 2. **The agent's own title.** Claude Code titles its terminal with the conversation's name. The status glyph in front (`✳`, braille spinners) is dropped, and generic titles like "Claude Code", shell names or paths are ignored.
 3. **The program's name**, e.g. "zsh" or "Claude Code".
 
@@ -184,7 +188,9 @@ Tabs that herdr-sab creates (agent tasks, issue **Start**) get names such as `#2
 
 Nothing is written to Herdr: automatic names are only drawn, so other layouts show Herdr's own names.
 
-Settings: turn automatic names off, or turn off each source (Jira keys, GitHub numbers, agent title).
+Settings: turn automatic names off, or choose the sources (Jira keys, GitHub numbers, agent title).
+
+**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://mumz.atlassian.net`). Then a tab whose name, branch or folder carries a key like `DS-1234` gets a ticket button while it's active, and `⌘⌥J` opens it: `https://mumz.atlassian.net/browse/DS-1234`. The PR panel shows the same link for a key in the pull request's title or branch.
 
 ---
 
@@ -243,7 +249,7 @@ The chip reflects your **active gcloud configuration**, which is global, not per
 
 ## 7. Open in editor
 
-`⌘⇧O`, the ⧉ button, or **Open with…** in Files and Preview opens a small list of the editors installed on this Mac:
+`⌘⇧O`, the **Editor** button in the tab bar, or **Open with…** in Files and Preview opens a small list of the editors installed on this Mac:
 
 - Cursor, VS Code (and Insiders), Windsurf, Antigravity, Kiro, Trae, VSCodium, Positron, Zed, Sublime Text, IntelliJ IDEA, WebStorm, PyCharm, GoLand, PhpStorm, RubyMine, RustRover, CLion, Rider, Fleet, Nova, BBEdit, TextMate, Xcode;
 - in a split: Neovim, Helix, Vim.
@@ -299,43 +305,34 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 
 ### Every setting
 
-| Section | Setting | Default | Notes |
+| Page | Setting | Default | Notes |
 |---|---|---|---|
 | **Tab bar** | Name tabs automatically | on | Off: Herdr's own names |
-| | Jira keys | on | `WEB-142` from branch or folder |
-| | GitHub issue numbers | on | `#123` from `123-…`, `issue-123` |
-| | Agent's own title | on | |
-| | Open in editor button | on | `⌘⇧O` works either way |
-| | Panel button labels | on | Off: icons only |
-| **Side panels** | Files / Changes / Pull requests / Issues | on | Off: no button; a shown panel closes |
-| | Commit from the panel | on | Hides the message and Commit |
+| | Use: Jira keys · GitHub #123 · Agent title | Jira and agent title on | chips |
+| | Jira site | none | e.g. `https://mumz.atlassian.net`; DS-1234 opens `<site>/browse/DS-1234` |
+| | Open in editor | on | `⌘⇧O` works either way |
+| | Labels beside icons | on | Off: icons only |
+| **Panels** | Files · Changes · Pull requests · Issues | Issues off | chips; off: no button |
+| | Commit from Changes | on | |
+| | Pull request sections | all on | Description · People · Checks · Threads · Comments · Agent · Files |
+| | Merge with | Repo default | Squash · Merge · Rebase |
+| | Actions on the open list | on | ↗, Review, Describe |
+| | Issues: show up to | 100 | 25–500 |
+| **GitHub** | Logged in to gh | — | every login; **Make active** (`gh auth switch`), **Add…** (`gh auth login`) |
+| | Find it automatically | on | first account that can see the repository |
+| | Pinned | none | `owner/name=login, …`; the panels' account menu sets these |
+| **Agent tasks** | Start tasks with | Claude Code | any installed agent, or the first installed |
+| | Tasks | all on | Code review · Describe change · Explain · Address feedback · Resolve conflicts · Start on issue |
+| | Prompts | built-in | file only, see below |
 | **Claude context** | Show context on tabs | on | |
 | | Warn from | 80% | 50–100 |
-| | Dim after | 10 min | 1–120 |
 | | Snapshot folders | `~/.harp`, herdr-agent-usage's | comma separated |
 | **gcloud** | Show gcloud login | on | |
 | | Chip shows | Project | Project · Account · Dot only |
-| | Check every | 2 min | |
-| | Check the login still works | on | network: `print-access-token` |
-| | Token check every | 10 min | |
+| | Catch an expired login | on | network: `print-access-token` |
 | | Login command | `auth login` | args after `gcloud` |
-| **GitHub** | Find the right account | on | first logged-in `gh` account that can see the repo |
-| | Logged in to gh | — | every `gh` login; **Make active** (`gh auth switch`), **Add…** (`gh auth login`) |
-| | Pin by repository | none | `owner/name=login, …`; the panels' gh menu sets these; wins over all |
-| | Pin by owner | none | `owner=login, …`; wins over finding |
-| | Remembered | — | which account each repository uses; **Forget** clears it |
-| **Agent tasks** | Start tasks with | Claude Code | any installed agent, or the first installed |
-| | Code review / Describe change / Explain it / Address feedback / Resolve conflicts | on | PR panel |
-| | Start on an issue | on | Issues panel |
-| | Prompts | built-in | file only, see below |
-| **Pull requests** | Read again every | 60 s | 30–900 |
-| | Merge with | Repo default | Squash · Merge · Rebase |
-| | Actions on the open list | on | ↗, Review, Describe |
-| | Sections | all on | Description, People and labels, Checks, Unresolved threads, Ask your agent, Files |
-| **Issues** | Show up to | 100 | 25–500 |
-| | Read again every | 120 s | 30–900 |
 
-The nav also has **Open sab.json** (opens the file with Open with), **Reset to defaults** (press twice), and **Herdr settings…**.
+Only in `sab.json` (fine as they are for most people): `pr.refreshSeconds` (60), `issues.refreshSeconds` (120), `gcloud.refreshMinutes` (2), `gcloud.tokenCheckMinutes` (10), `context.staleMinutes` (10), `github.accounts` (owner pins).
 
 ### The settings file
 

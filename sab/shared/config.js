@@ -15,7 +15,7 @@ export const DEFAULTS = {
   tabs: {
     autoName: true,          // name unnamed tabs automatically
     issueKeyJira: true,      // WEB-142 from the branch or folder
-    issueKeyGithub: true,    // #123 from a branch like 123-fix or issue-123
+    issueKeyGithub: false,   // #123 from a branch like 123-fix or issue-123
     agentTitle: true,        // the agent's own terminal title
     editorButton: true,      // Open in editor button in the tab bar
     panelLabels: true,       // text beside the panel buttons' icons
@@ -34,7 +34,10 @@ export const DEFAULTS = {
     refreshMinutes: 2,
     loginArgs: ["auth", "login"],  // e.g. ["auth", "login", "--update-adc"]
   },
-  panels: { files: true, changes: true, pr: true, issues: true },
+  jira: {
+    baseUrl: "",             // e.g. "https://your-site.atlassian.net": DS-1234 opens <baseUrl>/browse/DS-1234
+  },
+  panels: { files: true, changes: true, pr: true, issues: false },
   github: {
     autoAccount: true,       // find the logged-in gh account that can see each repository
     accounts: {},            // pin by owner: { "my-org": "my-login" }
@@ -47,7 +50,7 @@ export const DEFAULTS = {
     refreshSeconds: 60,
     mergeMethod: "auto",     // "auto" | "squash" | "merge" | "rebase"
     rowActions: true,        // Review / Describe / browser on the open list
-    sections: { description: true, people: true, checks: true, threads: true, agent: true, files: true },
+    sections: { description: true, people: true, checks: true, threads: true, comments: true, agent: true, files: true },
     tasks: { review: true, describe: true, explain: true, feedback: true, conflicts: true },
   },
   issues: { limit: 100, refreshSeconds: 120, startButton: true },
@@ -57,6 +60,23 @@ export const DEFAULTS = {
   // conflicts, issue.
   prompts: {},
 };
+
+// A Jira-style key (DS-1234) in some text, or null.
+export function jiraKey(text) {
+  return /(?:^|[^A-Za-z0-9])([A-Z][A-Z0-9]{1,9}-\d{1,6})(?![A-Za-z0-9])/.exec(String(text ?? ""))?.[1] ?? null;
+}
+// The Atlassian site from jira.baseUrl ("mumz.atlassian.net" or any URL on it), or null.
+export function jiraSite() {
+  const raw = String(cfg().jira?.baseUrl ?? "").trim();
+  if (!raw) return null;
+  const m = /^(?:https?:\/\/)?([^/\s]+)/i.exec(raw);
+  return m ? `https://${m[1]}` : null;
+}
+// Where a Jira key opens: <site>/browse/DS-1234, or null without a site.
+export function jiraUrl(key) {
+  const site = jiraSite();
+  return site && key && /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/.test(key) ? `${site}/browse/${key}` : null;
+}
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
