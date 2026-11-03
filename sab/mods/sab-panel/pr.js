@@ -22,7 +22,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips, linkJira } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips, linkJira, createPr } from "./lib.js";
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,comments,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
@@ -271,17 +271,19 @@ export class PullRequest {
     cx.notify();
   }
 
+  // Pushes the branch and opens a pull request for it (lib.js createPr), then shows it.
   createPr(cx) {
-    if (this.busy) return;
+    if (this.busy || !this.root) return;
     this.busy = "Create"; this.note = null;
+    const root = this.root, on = this.on;
     cx.spawn(async (cx) => {
       try {
-        const up = await exec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: this.root, on: this.on });
-        if (up.code !== 0) throw new Error(`push ${this.branch ?? "the branch"} first; it has no upstream`);
-        const r = await this.gh(["pr", "create", "--web"]);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        const { url, existed } = await createPr(root, on);
+        if (existed) this.note = "It already had one; showing it.";
+        this.selected = null; this.listing = false;
+        if (url && !existed) notify({ title: "Pull request created", body: url, level: "success" });
       } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
-      finally { this.busy = null; cx.notify(); }
+      finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
     });
     cx.notify();
   }
@@ -491,7 +493,7 @@ export class PullRequest {
         .children(rows.map(row))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
         .child(div().text_size(12).text_color(c.dim).child(`${this.branch} has no pull request yet.`))
-        .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
+        .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Pushing and creating…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
@@ -810,8 +812,8 @@ export class PullRequest {
     } else if (this.outside) body = this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
     else if (this.error) body = this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
     else if (this.none) body = this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,
-      this.note ?? "Push the branch, then open one on GitHub.",
-      quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
+      this.note ?? `Create pushes ${this.branch ?? "the branch"} and opens a ${cfg().pr.createDraft === false ? "" : "draft "}pull request titled from its commits.`,
+      quietLink("pr-create", this.busy === "Create" ? "Pushing and creating…" : "Create pull request", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
     else body = this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
 
     return v_flex().id("sab-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()

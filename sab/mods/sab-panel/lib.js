@@ -201,6 +201,47 @@ export function accountPicker(p, c, prefix) {
     .child(action("settings", "settings", "Account settings…", (cx) => { close(cx); openOverlay({ mod: "sab-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); })));
 }
 
+// ---- Creating a pull request -----------------------------------------------------
+
+// git that fails instead of waiting for a password prompt nobody can see.
+const GIT_NO_PROMPT = 'GIT_TERMINAL_PROMPT=0 exec git "$@"';
+const PR_EXISTS = /already exists[^\n]*\n?\s*(https:\/\/\S+)/i;
+
+// The remote's default branch (origin/HEAD), else main or master if origin has one.
+export async function defaultBranch(root, on) {
+  const head = await exec("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], { cwd: root, on }).catch(() => null);
+  if (head?.code === 0 && head.stdout.trim().startsWith("origin/")) return head.stdout.trim().slice(7);
+  for (const name of ["main", "master"]) {
+    const r = await exec("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`], { cwd: root, on }).catch(() => null);
+    if (r?.code === 0) return name;
+  }
+  return null;
+}
+
+// Pushes the current branch (setting its upstream the first time) and opens a
+// pull request for it with `gh pr create --fill`, as the gh account that can
+// see the repository. Draft unless pr.createDraft is off. Resolves to
+// { url, existed }; throws an Error whose message says what to do.
+export async function createPr(root, on) {
+  const git = (args) => exec("git", args, { cwd: root, on });
+  const branch = (await git(["branch", "--show-current"])).stdout.trim();
+  if (!branch) throw new Error("HEAD is detached: check out a branch first");
+  const base = await defaultBranch(root, on);
+  if (base && branch === base) throw new Error(`you're on ${base}: make a branch for these commits first`);
+  const { repo, account } = await ghAccount(root, on);
+  if (!repo) throw new Error("origin is not a GitHub repository");
+  const up = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  const push = await exec("sh", ["-c", GIT_NO_PROMPT, "sh", "push", ...(up.code === 0 ? [] : ["-u", "origin", "HEAD"])], { cwd: root, on });
+  if (push.code !== 0) throw new Error(`push failed: ${(push.stderr || push.stdout).trim().split("\n").filter(Boolean).pop() ?? ""}`);
+  const r = await ghAs(account, ["pr", "create", "--fill", ...(cfg().pr.createDraft === false ? [] : ["--draft"]), "--head", branch], { cwd: root, on });
+  const out = `${r.stdout}\n${r.stderr}`;
+  const existing = PR_EXISTS.exec(out);
+  if (existing) return { url: existing[1], existed: true };
+  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "gh pr create failed");
+  const url = out.match(/https:\/\/\S+\/pull\/\d+/)?.[0] ?? null;
+  return { url, existed: false };
+}
+
 // Forget the account found for a repository (after it stopped working).
 export function forgetGhAccount(root, on, repo) {
   if (!repo) return;

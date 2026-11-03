@@ -124,6 +124,11 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 - Every uncommitted change in the repository, with `+added −removed` per file and in total.
 - The first file's diff shows straight away. Click another file to see its diff; click it again to close.
 - **Commit** commits only the files listed, never `git add -A` on the whole tree. You can turn committing off in settings.
+- **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account that can see the repository. Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
+- **A folder of repositories.** When the pane's folder isn't a repository but holds several (`~/work/client/api`, `~/work/client/web`…), the panel finds them, up to 2 folders deep (hidden folders, `node_modules`, `vendor`, `dist`, `build` and `target` are skipped), and shows one section per repository with its branch and `+added −removed`. Click a section's header to fold it.
+  - The chips under the title filter the list: **All**, or one repository. Repositories without changes are left out of **All**.
+  - **Commit** and **Create PR** go to one repository: the one picked in the chips, else the one whose diff is open. The line above the message says which. A repository with no changes but commits ahead of its base (`↑2`) still shows, ready for its pull request.
+  - Turn it off, or look deeper, in settings → Panels.
 
 ### Pull requests (PR)
 
@@ -148,7 +153,7 @@ The pull request view, top to bottom:
 | Ask your agent | **Code review**, **Describe change**, **Explain it**, **Address feedback**, **Resolve conflicts** (only when it conflicts) |
 | Files | Changed files; click one to see its diff inline |
 
-Header buttons: refresh, copy the link, open on GitHub. If the branch has no pull request, **Create it on GitHub** opens GitHub's form (push the branch first).
+Header buttons: refresh, copy the link, open on GitHub. If the branch has no pull request, **Create pull request** pushes it and runs `gh pr create --fill` (a draft by default), then shows the new one.
 
 The panel rereads every 60 s while shown (configurable), and every 20 s while a check is running.
 
@@ -325,6 +330,10 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Labels beside icons | on | Off: icons only |
 | **Panels** | Files · Changes · Pull requests · Issues | Issues off | chips; off: no button |
 | | Commit from Changes | on | |
+| | Create PR from Changes | on | push + `gh pr create --fill` |
+| | Create pull requests as drafts | on | Changes and PR panels |
+| | Repositories in subfolders | on | a folder that isn't a repository shows each one inside it |
+| | Look for them | 2 deep | 1 to 5 folders below the pane's folder |
 | | Pull request sections | all on | Description · People · Checks · Threads · Comments · Agent · Files |
 | | Merge with | Repo default | Squash · Merge · Rebase |
 | | Actions on the open list | on | ↗, Review, Describe |

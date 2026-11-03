@@ -15,6 +15,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **A right side panel** with **Files**, **Changes**, **Pull requests** and **Issues**. It follows the pane you're in, so each session sees its own repository.
   - **PR**: every open pull request, with labels, comments, checks, unresolved threads, reviewers, files and diffs, and merge. One click hands your agent a **Code review**, **Describe change**, **Explain**, **Address feedback** or **Resolve conflicts** task in a new tab.
   - **Issues** (off by default): the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
+  - **Changes** in a folder of repositories (not one itself) shows each repository in its own section, with a filter chip per repository, and commits to the one you pick. **Create PR** beside Commit pushes the branch and opens a draft pull request from its commits.
   - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. The account menu in the panel header switches it per repository or adds one.
 - **Tabs that name themselves.** An unnamed tab shows the Jira key its branch carries (`DS-1234`) or its agent's own title. A name you type always wins.
 - **Jira everywhere.** Set your site and every key like `DS-1234` links to its ticket: on tabs (`⌘⌥J`), pull request titles, branches, descriptions and comments, issues, and Markdown previews.

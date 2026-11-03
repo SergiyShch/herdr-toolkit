@@ -51,12 +51,19 @@ export const DEFAULTS = {
   pr: {
     refreshSeconds: 60,
     mergeMethod: "auto",     // "auto" | "squash" | "merge" | "rebase"
+    createDraft: true,       // Create PR (Changes and PR panels) opens a draft
     rowActions: true,        // Review / Describe / browser on the open list
     sections: { description: true, people: true, checks: true, threads: true, comments: true, agent: true, files: true },
     tasks: { review: true, describe: true, explain: true, feedback: true, conflicts: true },
   },
   issues: { limit: 100, refreshSeconds: 120, startButton: true },
-  changes: { commit: true },
+  changes: {
+    commit: true,
+    createPr: true,          // Create PR beside Commit: push the branch and gh pr create --fill
+    nested: true,            // a folder that is not a repository: the repositories inside it, one section each
+    scanDepth: 2,            // how many folders deep to look for them (1-5)
+    maxRepos: 40,
+  },
   // Task prompts, overriding the built-in ones. Placeholders: {number} {url}
   // {title} {head} {base}. Keys: review, describe, explain, feedback,
   // conflicts, issue.
