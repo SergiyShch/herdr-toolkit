@@ -41,7 +41,7 @@ The installer:
 
 - copies `sab/layouts/sab.json` to `~/.config/herdr-app/layouts/`;
 - copies the mods `sab-tabs`, `sab-panel`, `sab-open-with`, `sab-settings` and `sab-chrome` to `~/.config/herdr-app/mods/`;
-- adds three keys to the `layout:sab` section of `keys.json`;
+- adds four keys to the `layout:sab` section of `keys.json`;
 - runs `herdr-app check` on each mod.
 
 It refuses to overwrite a mod or layout of the same name that it didn't install. It marks its own mods with a `.herdr-sab` file.
@@ -50,7 +50,7 @@ It refuses to overwrite a mod or layout of the same name that it didn't install.
 
 **Switch back.** Press `ctrl-shift-l`, or pick another layout in Herdr's Settings → Look.
 
-**Remove.** `scripts/install.sh --remove` deletes the layout, the five mods and the three keys. Your settings file `~/.config/herdr-app/sab.json` stays; delete it by hand if you like.
+**Remove.** `scripts/install.sh --remove` deletes the layout, the five mods and the four keys. Your settings file `~/.config/herdr-app/sab.json` stays; delete it by hand if you like.
 
 `HERDR_APP_HOME=/path scripts/install.sh` installs into another Herdr home.
 

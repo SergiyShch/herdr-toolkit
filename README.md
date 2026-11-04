@@ -10,6 +10,28 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 
 **→ [The guide](docs/GUIDE.md)** covers every feature, the settings, workflows and troubleshooting.
 
+## Quick install
+
+1. Have the [Herdr desktop app](https://herdr.dev) open, plus `git` and `python3`. For the PR and
+   Issues panels, install the [GitHub CLI](https://cli.github.com) and run `gh auth login`.
+2. Clone and install:
+
+   ```sh
+   git clone https://github.com/thabti/herdr-sab
+   cd herdr-sab
+   scripts/install.sh
+   ```
+
+3. Switch to the layout:
+
+   ```sh
+   herdr-app do layout.switch --name sab
+   ```
+
+4. Open **herdr-sab settings** (`⌘⌥,`) to turn features on or off.
+
+`ctrl-shift-l` takes you back to your previous layout. More options are under [Install](#install).
+
 ## What you get
 
 - **A right side panel** with **Files**, **Changes**, **Pull requests** and **Issues**. It follows the pane you're in, so each session sees its own repository.
@@ -28,17 +50,15 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 
 You need the Herdr desktop app, `git`, `python3`, and the [GitHub CLI](https://cli.github.com) (`gh auth login`) for the PR and Issues panels. `gcloud` is optional.
 
-```sh
-git clone https://github.com/thabti/herdr-sab
-cd herdr-sab
-scripts/install.sh --dry-run     # shows what it will copy; changes nothing
-scripts/install.sh               # copies the layout and 5 mods, adds 4 keys, runs herdr-app check
-herdr-app do layout.switch --name sab
-```
+`scripts/install.sh --dry-run` shows what the installer will copy and changes nothing. A real run
+copies the layout and 5 mods into `~/.config/herdr-app`, adds 4 keys, and runs `herdr-app check` on
+each mod. It never overwrites files it didn't install, and it leaves keys you already use alone.
+`HERDR_APP_HOME=/path scripts/install.sh` installs into another Herdr home.
 
-`ctrl-shift-l` switches back to your previous layout. `scripts/install.sh --remove`
-removes everything the installer added. It never overwrites files it didn't install,
-and it leaves keys you already use alone.
+- **Update:** `git pull && scripts/install.sh`. Herdr reloads the mods live.
+- **Switch back:** `ctrl-shift-l` returns to your previous layout.
+- **Remove:** `scripts/install.sh --remove` deletes everything the installer added. Your settings
+  in `~/.config/herdr-app/sab.json` stay.
 
 ## Keys
 
