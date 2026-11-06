@@ -58,6 +58,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - One `git diff HEAD -U1000000` call gives both whole files; `sideBySide()` pairs `-`/`+` runs into rows, so one virtual list scrolls both halves.
 - Gotchas: `scroll_to_item` in the same frame the list's row count changes leaves it blank (Whole file was empty): jump from a timer (`goSoon`). A vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
 - "Whole file" vs "Changes only" persists in shared `serhii.diffWholeFile`.
+- Changes passes `files` (its shown list, in order); `go()` past the last/first change calls `show(k, "first"|"last")` for the next/previous file, wrapping. `load`/`watch` drop results once the dialog moved to another file.
 
 ## Git panel (`git.js`)
 

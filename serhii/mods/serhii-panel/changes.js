@@ -249,10 +249,12 @@ export class Changes {
     return changed.length === 1 ? changed[0] : null;
   }
 
-  // The file's last commit and working tree side by side, in a dialog (diff.js).
+  // The file's last commit and working tree side by side, in a dialog (diff.js),
+  // with the list's other files so its arrows walk on to them.
   sideBySide(repo, f) {
-    openOverlay({ mod: "serhii-panel", kind: "dialog", width: 0.94, height: 0.9,
-      props: { panel: "diff", root: repo.root, path: f.path, on: repo.on ?? null, fresh: f.fresh, hasHead: repo.hasHead, status: f.status } });
+    const one = (r, x) => ({ root: r.root, path: x.path, on: r.on ?? null, fresh: x.fresh, hasHead: r.hasHead, status: x.status });
+    const files = this.shown().flatMap((r) => r.files.filter((x) => insideRoot(x.path)).map((x) => one(r, x))).slice(0, 2000);
+    openOverlay({ mod: "serhii-panel", kind: "dialog", width: 0.94, height: 0.9, props: { panel: "diff", ...one(repo, f), files } });
   }
 
   isOpen(root, path) { return this.open?.root === root && this.open?.path === path; }

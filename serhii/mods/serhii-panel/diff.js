@@ -2,9 +2,10 @@
 // the left, the working tree on the right, one row per pair of lines so both
 // halves scroll as one. A changed line is paired with its new version and the
 // part that differs is marked; unchanged runs fold away (click to unfold).
-// F7 / Shift+F7 (or ↓ / ↑ in the toolbar) jump between changes.
+// F7 / Shift+F7 (or ↓ / ↑ in the toolbar) jump between changes, and past
+// the last (first) change on to the next (previous) file of the list.
 // Opened by the Changes panel as a dialog of this mod with props
-// { panel: "diff", root, path, on, fresh, hasHead, status }.
+// { panel: "diff", root, path, on, fresh, hasHead, status, files: [those, per file] }.
 // New for herdr-serhii.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
@@ -79,23 +80,38 @@ function split(a, b) {
 
 export class Diff {
   init(cx, p) {
-    this.root = p.root; this.path = p.path; this.on = p.on ?? null;
-    this.fresh = Boolean(p.fresh); this.hasHead = p.hasHead !== false; this.status = p.status ?? "M";
     this.overlay = p.overlay;
-    this.rows = []; this.view = []; this.width = 1200; this.changes = []; this.current = -1; this.open = new Set();
-    this.whole = Boolean(shared(WHOLE));
-    this.error = null; this.loading = true; this.gone = false;
+    // The Changes list's files, in its order; the arrows walk on through them.
+    const self = { root: p.root, path: p.path, on: p.on, fresh: p.fresh, hasHead: p.hasHead, status: p.status };
+    this.files = Array.isArray(p.files) && p.files.length ? p.files : [self];
+    this.index = this.files.findIndex((f) => f.root === p.root && f.path === p.path);
+    if (this.index < 0) { this.files = [self, ...this.files]; this.index = 0; }
+    this.width = 1200; this.whole = Boolean(shared(WHOLE)); this.gone = false;
     this.handle = cx.focus_handle(); this.scroll = VirtualListScrollHandle.new();
-    this.load(cx, true);
-    this.watch(cx);
+    this.show(this.index, "first", cx);
+    this.ready = true;
     // Take the keyboard (F7) once the dialog is up: focus can't move during render.
     cx.timer.after(0, () => { if (!this.gone) this.handle.focus(); });
   }
 
   async close() { this.gone = true; this.scroll?.release(); this.scroll = null; }
 
-  load(cx, first = false) {
-    const { root, path, on } = this;
+  // Shows the list's file `k`, at its first or last change (`where`).
+  show(k, where, cx) {
+    const f = this.files[k];
+    this.index = k;
+    this.root = f.root; this.path = f.path; this.on = f.on ?? null;
+    this.fresh = Boolean(f.fresh); this.hasHead = f.hasHead !== false; this.status = f.status ?? "M";
+    this.rows = []; this.view = []; this.changes = []; this.current = -1; this.open = new Set();
+    this.error = null; this.loading = true; this.limited = false;
+    this.load(cx, where);
+    this.watch(cx);
+    if (this.ready) cx.notify();
+  }
+
+  // `jump`: "first" or "last" puts that change on screen once read.
+  load(cx, jump = null) {
+    const { root, path, on } = this, same = () => !this.gone && this.root === root && this.path === path;
     cx.spawn(async (cx) => {
       try {
         let lines;
@@ -114,27 +130,28 @@ export class Diff {
           if (at < 0) throw new Error(/^Binary files/m.test(r.stdout) ? "Binary file · no text diff" : "No changes left in this file");
           lines = all.slice(at);
         }
-        if (this.gone) return;
+        if (!same()) return;
         this.rows = sideBySide(lines.slice(0, MAX_ROWS));
         this.limited = lines.length > MAX_ROWS;
         this.error = null;
         this.layout();
-        if (first && this.changes.length) { this.current = 0; this.goSoon(0, cx); }
-      } catch (e) { if (!this.gone) { this.error = String(e?.message ?? e); this.rows = []; this.layout(); } }
-      finally { this.loading = false; if (!this.gone) cx.notify(); }
+        if (jump && this.changes.length) { this.current = jump === "last" ? this.changes.length - 1 : 0; this.goSoon(this.current, cx); }
+      } catch (e) { if (same()) { this.error = String(e?.message ?? e); this.rows = []; this.layout(); } }
+      finally { if (same()) { this.loading = false; cx.notify(); } }
     });
   }
 
   // Reads again when the file's folder changes (this computer only), once per save storm.
   watch(cx) {
     if (this.on) return;
-    const dir = `${this.root}/${this.path}`.replace(/\/[^/]*$/, "");
+    const { root, path } = this, here = () => !this.gone && this.root === root && this.path === path;
+    const dir = `${root}/${path}`.replace(/\/[^/]*$/, "");
     cx.spawn(async (cx) => {
       try {
-        while (!this.gone) {
+        while (here()) {
           await watchFolder(dir);
-          if (this.gone || this.armed) continue;
-          this.armed = cx.timer.after(400, (cx) => { this.armed = null; if (!this.gone) this.load(cx); });
+          if (!here() || this.armed) continue;
+          this.armed = cx.timer.after(400, (cx) => { this.armed = null; if (here()) this.load(cx); });
         }
       } catch {}
     });
@@ -153,7 +170,14 @@ export class Diff {
   }
 
   go(i, notify = true, cx) {
-    if (!this.changes.length) return;
+    // Past this file's last (or before its first) change: the next (previous) file.
+    const n = this.changes.length;
+    if (cx && this.files.length > 1 && !this.loading && (i >= n || i < 0)) {
+      const k = (this.index + (i < 0 ? -1 : 1) + this.files.length) % this.files.length;
+      this.show(k, i < 0 ? "last" : "first", cx);
+      return;
+    }
+    if (!n) return;
     this.current = (i + this.changes.length) % this.changes.length;
     this.scroll?.scroll_to_item(this.changes[this.current], "center");
     if (notify && cx) cx.notify();
@@ -218,7 +242,7 @@ export class Diff {
       .when(on, (e) => e.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => action(cx))).child(label);
     const icon = (id, file, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(svg(`${ICON}${file}.svg`).size(14));
-    const n = this.changes.length;
+    const n = this.changes.length, many = this.files.length > 1;
     // A virtual list takes its width from its first row, so rows get the dialog's width.
     return v_flex().id("diff").size_full().min_h(0).on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } }).bg(t.background).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
@@ -232,9 +256,10 @@ export class Diff {
         .when(add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)))
         .when(del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
         .child(div().flex_1())
+        .when(many, (e) => e.child(div().text_size(11).text_color(t.dim).child(`file ${this.index + 1} / ${this.files.length}`)))
         .child(div().text_size(11).text_color(t.dim).child(n ? `${this.current >= 0 ? this.current + 1 : "–"} / ${n} change${n === 1 ? "" : "s"}` : ""))
-        .child(btn("diff-prev", "↑", "Previous change (Shift+F7)", (cx) => this.go(this.current - 1, true, cx), n > 0))
-        .child(btn("diff-next", "↓", "Next change (F7)", (cx) => this.go(this.current + 1, true, cx), n > 0))
+        .child(btn("diff-prev", "↑", many ? "Previous change, then the previous file (Shift+F7)" : "Previous change (Shift+F7)", (cx) => this.go(this.current - 1, true, cx), n > 0 || many))
+        .child(btn("diff-next", "↓", many ? "Next change, then the next file (F7)" : "Next change (F7)", (cx) => this.go(this.current + 1, true, cx), n > 0 || many))
         .child(btn("diff-whole", this.whole ? "Whole file" : "Changes only", this.whole ? "Fold unchanged lines" : "Show the whole file", (cx) => this.setWhole(!this.whole, cx)))
         .child(icon("diff-open-with", "open-with", "Open with…", () => this.openWith()))
         .child(icon("diff-refresh", "refresh", "Read again", (cx) => this.load(cx)))
