@@ -46,6 +46,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
     - On 54 repos that is 2.4 s per refresh, down from 9.4 s.
   - `readRepo` returns `{ root, name, files, branch, base, ahead }`. `target()` picks the repo for Commit and Create PR: the filter chip, else the repo of the file last opened (`this.open`).
 - The panel is only the file list: a click opens the side-by-side dialog (`diff.js`); there is no diff under the list.
+- New (untracked) files get their `+N` from one `wc -l` call per repo (`countNew`, up to 200 files).
 - **Create PR** (`createPr` in `lib.js`, also used by the PR panel):
   - Pushes the branch (`-u origin HEAD` on the first push), then runs `gh pr create --fill [--draft] --head <branch>`.
   - It returns `{ url, existed }`.
@@ -55,7 +56,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 
 - Opened by Changes (a click on a file) as a dialog: `openOverlay({ mod: "serhii-panel", kind: "dialog", props: { panel: "diff", root, path, on, fresh, hasHead, status } })`. `main.js` maps `panel: "diff"` to it; it is not in the `panel-body` stack.
 - One `git diff HEAD -U1000000` call gives both whole files; `sideBySide()` pairs `-`/`+` runs into rows, so one virtual list scrolls both halves.
-- Gotchas: a vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
+- Gotchas: `scroll_to_item` in the same frame the list's row count changes leaves it blank (Whole file was empty): jump from a timer (`goSoon`). A vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
 - "Whole file" vs "Changes only" persists in shared `serhii.diffWholeFile`.
 
 ## Git panel (`git.js`)
@@ -70,6 +71,10 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 
 - With `tabs.wrap` (on) the tabs sit in a `flex_wrap` row; its `on_size_change` height is the bar's height, applied with `layout.resize { id: "tabs", px }` (never under 42, the layout's one-row size). The root is `items_start` so that row measures its content, not the block.
 - The SDK has `gap_x`/`gap_y`, not `row_gap`.
+
+## Editor button
+
+- Drops `serhii-open-with` down under itself: `openOverlay({ kind: "popup", at: { x, y } })` from the button's `bounds` (taken on mouse down), right edges aligned. `⌘⇧O` (keys.json `mod.open`) still uses mod.json's `at: "top"`.
 
 ## Diff colours
 

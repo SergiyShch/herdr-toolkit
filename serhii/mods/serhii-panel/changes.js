@@ -2,7 +2,7 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-changes.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-changes; one of the kanso-panel mod's panels.
-// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; a click opens the file side by side (no diff in the panel).
+// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; a click opens the file side by side (no diff in the panel); counts new files' lines.
 // A folder that is not a repository but holds several (~/work/client/api,
 // ~/work/client/web…) shows each one's changes in its own section, with a
 // filter per repository, and commits to one repository at a time.
@@ -96,6 +96,10 @@ async function readRepo(root, name, on) {
   // Commits on this branch that its base (origin's default branch) doesn't have: what a pull request would hold.
   const base = hasHead && branch ? await baseOf(root, on) : null;
   const ahead = base && branch !== base ? await aheadOf(root, on, oid, base) : 0;
+  // A new (untracked) file has no diff to count: its lines are its additions.
+  // One `wc -l` for all of them (up to MAX_COUNT).
+  const fresh = entries.slice(0, MAX_FILES).filter((e) => e.xy === "??" && insideRoot(e.path) && !stats[e.path]).map((e) => e.path);
+  if (fresh.length) Object.assign(stats, await countNew(root, on, fresh.slice(0, MAX_COUNT)));
   const files = [];
   for (const { xy, path } of entries.slice(0, MAX_FILES)) {
     const fresh = xy === "??", conflict = xy.includes("U") || xy === "AA" || xy === "DD";
@@ -103,6 +107,19 @@ async function readRepo(root, name, on) {
     files.push({ path, status: s, fresh, stagedDeletion: xy === "D ", ...(stats[path] ?? { add: 0, del: 0 }) });
   }
   return { root, name, on, hasHead, files, limited: entries.length > MAX_FILES, branch, base, ahead };
+}
+
+// Lines in new files, as { path: { add, del: 0 } }: one `wc -l` call. A file
+// whose last line has no newline counts one short, as `wc` does.
+const MAX_COUNT = 200;
+async function countNew(root, on, paths) {
+  const r = await exec("wc", ["-l", "--", ...paths], { cwd: root, on }).catch(() => null);
+  const out = {};
+  for (const line of (r?.stdout ?? "").split("\n")) {
+    const m = /^\s*(\d+)\s(.*)$/.exec(line);
+    if (m && paths.includes(m[2])) out[m[2]] = { add: Number(m[1]), del: 0 };
+  }
+  return out;
 }
 
 // Runs `fn` over `items`, `n` at a time, in order.

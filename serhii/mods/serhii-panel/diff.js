@@ -119,7 +119,7 @@ export class Diff {
         this.limited = lines.length > MAX_ROWS;
         this.error = null;
         this.layout();
-        if (first && this.changes.length) this.current = 0;
+        if (first && this.changes.length) { this.current = 0; this.goSoon(0, cx); }
       } catch (e) { if (!this.gone) { this.error = String(e?.message ?? e); this.rows = []; this.layout(); } }
       finally { this.loading = false; if (!this.gone) cx.notify(); }
     });
@@ -155,13 +155,20 @@ export class Diff {
   go(i, notify = true, cx) {
     if (!this.changes.length) return;
     this.current = (i + this.changes.length) % this.changes.length;
-    this.scroll?.scroll_to_item(Math.max(0, this.changes[this.current] - 3), "top");
+    this.scroll?.scroll_to_item(this.changes[this.current], "center");
     if (notify && cx) cx.notify();
+  }
+
+  // Scrolling a virtual list in the frame its row count changes leaves it
+  // blank, so the jump waits for the list to lay out its new rows first.
+  goSoon(i, cx) {
+    cx.timer.after(60, (cx) => { if (!this.gone) this.go(i, true, cx); });
   }
 
   setWhole(whole, cx) {
     this.whole = whole; setShared(WHOLE, whole);
-    this.layout(); this.go(Math.max(0, this.current), false); cx.notify();
+    this.layout(); cx.notify();
+    this.goSoon(Math.max(0, this.current), cx);
   }
 
   unfold(at, cx) { this.open.add(at); this.layout(); cx.notify(); }

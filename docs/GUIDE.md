@@ -120,6 +120,7 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 ### Changes
 
 - Every uncommitted change in the repository, with `+added −removed` per file and in total.
+- A new (untracked) file counts its lines as additions.
 - **Click a file** to compare it side by side in a large dialog, as an IDE does: the last commit (HEAD) on the left, the working tree on the right, scrolling together. Changed lines are blue, with the part that differs marked; removed lines red, added lines green. Unchanged runs fold away (click a fold to show it); the **Changes only / Whole file** button switches modes and is remembered. **F7** / **Shift+F7** (or ↓ / ↑) jump between changes. It reads the file again on every save. Esc closes it.
 - **Commit** commits only the files listed, never `git add -A` on the whole tree. You can turn committing off in settings.
 - **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account that can see the repository. Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
@@ -271,7 +272,7 @@ The chip reflects your **active gcloud configuration**, which is global, not per
 
 The Finder button (left of **Editor**) opens the focused pane's folder in Finder. It's greyed out for a pane on another machine.
 
-`⌘⇧O`, the **Editor** button in the tab bar, or **Open with…** in Files and Preview opens a small list of the editors installed on this Mac:
+`⌘⇧O`, the **Editor** button in the tab bar, or **Open with…** in Files and Preview opens a small list of the editors installed on this Mac (the **Editor** button drops it down right under itself):
 
 - Cursor, VS Code (and Insiders), Windsurf, Antigravity, Kiro, Trae, VSCodium, Positron, Zed, Sublime Text, IntelliJ IDEA, WebStorm, PyCharm, GoLand, PhpStorm, RubyMine, RustRover, CLion, Rider, Fleet, Nova, BBEdit, TextMate, Xcode;
 - in a split: Neovim, Helix, Vim.

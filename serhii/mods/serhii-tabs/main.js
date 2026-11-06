@@ -13,7 +13,8 @@
 // - gcloud: who is logged in (dot: green yes, red no or expired), the project
 //   in the chip, account and project in the tooltip; the small button beside it
 //   runs `gcloud auth login` in a new tab (also cmd-alt-g).
-// - Open in editor (cmd-shift-o): the serhii-open-with popup for the focused pane.
+// - Open in editor (cmd-shift-o): the serhii-open-with popup for the focused pane,
+//   dropped down under the button when clicked.
 // - Tabs wrap onto more rows when they don't fit (tabs.wrap); the bar grows to fit.
 // - Panel buttons: Files, Changes, Git, PR, Issues toggle the right side panel
 //   (`panel` / `panel-body` in layouts/serhii.json); remembered per space.
@@ -27,6 +28,8 @@ import { shared, setShared, notify } from "herdr";
 const ICON = "mods/serhii-panel/icons/";
 // The bar's one-row height (the layout's tabs block).
 const BAR = 42;
+// The Open with dropdown's width.
+const EDITOR_W = 380;
 const PANELS = [
   { id: "files", label: "Files", icon: "file" },
   { id: "changes", label: "Changes", icon: "changes" },
@@ -338,8 +341,13 @@ export default class Tabs extends View {
     const hasPane = Boolean(focused()?.cwd || allPanes.some((p) => p.focused && p.cwd));
     const editor = h_flex().id("open-editor").h(26).px(8).gap(5).flex_none().items_center().rounded(6).text_size(12)
       .text_color(hasPane ? t.muted : t.dim).tooltip("Open the pane's folder in an editor  ⌘⇧O")
-      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
-      .on_click(() => openOverlay({ mod: "serhii-open-with", kind: "popup", at: "top", width: 380 }))
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
+      // A dropdown under the button, its right edge on the button's (⌘⇧O still opens it at the top).
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.editorAt = e.bounds ?? null; })
+      .on_click(() => {
+        const b = this.editorAt, at = b ? { x: Math.max(8, Math.round(b.x + b.width - EDITOR_W)), y: Math.round(b.y + b.height + 6) } : "pointer";
+        openOverlay({ mod: "serhii-open-with", kind: "popup", at, width: EDITOR_W });
+      })
       .child(svg(`${ICON}code.svg`).size(14)).when(labels, (el) => el.child("Editor"));
     // The focused pane's folder in Finder; a pane on another machine has none here.
     const where = this.paneFolder(space, allPanes);
