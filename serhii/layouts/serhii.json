@@ -70,7 +70,7 @@
           "id": "sidebar-footer",
           "type": "block",
           "size": {
-            "px": 97
+            "px": 69
           },
           "content": {
             "mod": "serhii-chrome",

@@ -1,5 +1,6 @@
-// Cloned from Herdr's shipped workspace-chrome (Apache-2.0) for herdr-serhii: adds a
-// "herdr-serhii settings" row to the sidebar footer, under Herdr's Settings.
+// Cloned from Herdr's shipped workspace-chrome (Apache-2.0) for herdr-serhii.
+// Modified for herdr-serhii: no "herdr-serhii settings" footer row any more;
+// the tab bar's ⚙ (and ⌘⌥,) opens them.
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, window, shared, setShared, updates, layout } from "herdr";
@@ -42,8 +43,6 @@ export default class WorkspaceChrome extends View {
       return v_flex().size_full().bg(t.chrome).border_t(1).border_color(t.border).px(8).pt(4).pb(8).text_size(13)
         .child(row("settings", "settings", "Settings", false, () => run("app.settings"))
           .when(Boolean(updates().app.ready), el => el.child(div().size(6).rounded_full().bg(t.accent))))
-        // herdr-serhii: its own settings, right under Herdr's (Herdr's Settings has no room for a mod's section).
-        .child(row("serhii-settings", "layers", "herdr-serhii settings", false, () => run("mod.open", { name: "serhii-settings" })))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)

@@ -88,8 +88,6 @@ Tab bar, left to right:
 | Files · Changes · Git · PR · Issues | Toggle the side panel ([§3](#3-the-side-panel)) |
 | ⚙ | herdr-serhii settings ([§9](#9-settings)) |
 
-The sidebar footer gains **herdr-serhii settings** under Herdr's **Settings**.
-
 ---
 
 ## 3. The side panel
@@ -320,7 +318,6 @@ Right-click the file in **Files** → **Preview in the panel**. It refreshes as 
 
 Open **herdr-serhii settings** from:
 
-- the sidebar footer, under Herdr's **Settings**;
 - the tab bar's ⚙;
 - `⌘⌥,`.
 
@@ -434,7 +431,7 @@ serhii/
       files.js changes.js git.js diff.js pr.js issues.js preview.js lib.js icons/
     serhii-open-with/        the editor picker
     serhii-settings/         the settings window
-    serhii-chrome/           Herdr's sidebar footer + "herdr-serhii settings"
+    serhii-chrome/           Herdr's sidebar header and footer
 scripts/
   install.sh              install / --dry-run / --remove
   sync-shared.sh          copies serhii/shared/*.js into the mods

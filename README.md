@@ -49,7 +49,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
 - **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.
 - **Your editor, one key away.** A Finder button opens the focused pane's folder in Finder. `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
-- **Settings for all of it.** **herdr-serhii settings** sits under Herdr's own **Settings** in the sidebar. Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/serhii.json`.
+- **Settings for all of it.** **herdr-serhii settings** opens from the ⚙ in the tab bar (or `⌘⌥,`). Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/serhii.json`.
 
 ## Install
 
