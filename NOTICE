@@ -1,14 +1,15 @@
-herdr-sab, a layout for the Herdr app
+herdr-serhii, a personal fork of herdr-sab (https://github.com/thabti/herdr-sab),
+a layout for the Herdr app
 
 Parts of this package are derived from Kanso (https://github.com/jlopezlira/herdr-kanso),
 Copyright 2026 jlopezlira, Apache License 2.0, which is itself derived from mods
 shipped with Herdr (https://github.com/herdrdev/herdr-app, Apache License 2.0):
 
-- sab/mods/sab-panel/{files,changes,pr,preview,lib}.js  (from kanso-panel)
-- sab/mods/sab-open-with/main.js                         (from open-with)
-- sab/mods/sab-panel/icons/*  (Kanso's Lucide-style set; issue/external/github/agent
+- serhii/mods/serhii-panel/{files,changes,pr,preview,lib}.js  (from kanso-panel)
+- serhii/mods/serhii-open-with/main.js                         (from open-with)
+- serhii/mods/serhii-panel/icons/*  (Kanso's Lucide-style set; issue/external/github/agent
   from herdr-mission-control, MIT)
-- sab/mods/sab-tabs/main.js   (from Herdr's shipped `tabs` mod)
+- serhii/mods/serhii-tabs/main.js   (from Herdr's shipped `tabs` mod)
 
 Each derived file's header says what changed. Kanso's original NOTICE is kept in NOTICE.kanso.
 Ideas (self-naming tabs, Claude context readings) come from

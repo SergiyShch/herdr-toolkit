@@ -1,6 +1,6 @@
-# herdr-sab guide
+# herdr-serhii guide
 
-This guide covers everything herdr-sab adds to Herdr, how to use it day to day, every setting, and what to do when something looks wrong.
+This guide covers everything herdr-serhii adds to Herdr, how to use it day to day, every setting, and what to do when something looks wrong.
 
 - [1. Install and remove](#1-install-and-remove)
 - [2. A tour of the window](#2-a-tour-of-the-window)
@@ -31,26 +31,26 @@ This guide covers everything herdr-sab adds to Herdr, how to use it day to day, 
 **Install**
 
 ```sh
-git clone https://github.com/thabti/herdr-sab && cd herdr-sab
+cd herdr-serhii
 scripts/install.sh --dry-run
 scripts/install.sh
-herdr-app do layout.switch --name sab
+herdr-app do layout.switch --name serhii
 ```
 
 The installer:
 
-- copies `sab/layouts/sab.json` to `~/.config/herdr-app/layouts/`;
-- copies the mods `sab-tabs`, `sab-panel`, `sab-open-with`, `sab-settings` and `sab-chrome` to `~/.config/herdr-app/mods/`;
-- adds four keys to the `layout:sab` section of `keys.json`;
+- copies `serhii/layouts/serhii.json` to `~/.config/herdr-app/layouts/`;
+- copies the mods `serhii-tabs`, `serhii-panel`, `serhii-open-with`, `serhii-settings` and `serhii-chrome` to `~/.config/herdr-app/mods/`;
+- adds four keys to the `layout:serhii` section of `keys.json`;
 - runs `herdr-app check` on each mod.
 
-It refuses to overwrite a mod or layout of the same name that it didn't install. It marks its own mods with a `.herdr-sab` file.
+It refuses to overwrite a mod or layout of the same name that it didn't install. It marks its own mods with a `.herdr-serhii` file.
 
 **Update.** `git pull && scripts/install.sh`. Herdr reloads the mods live.
 
 **Switch back.** Press `ctrl-shift-l`, or pick another layout in Herdr's Settings → Look.
 
-**Remove.** `scripts/install.sh --remove` deletes the layout, the five mods and the four keys. Your settings file `~/.config/herdr-app/sab.json` stays; delete it by hand if you like.
+**Remove.** `scripts/install.sh --remove` deletes the layout, the five mods and the four keys. Your settings file `~/.config/herdr-app/serhii.json` stays; delete it by hand if you like.
 
 `HERDR_APP_HOME=/path scripts/install.sh` installs into another Herdr home.
 
@@ -58,7 +58,7 @@ It refuses to overwrite a mod or layout of the same name that it didn't install.
 
 ## 2. A tour of the window
 
-`sab` is Herdr's own `main` layout with these changes:
+`serhii` is Herdr's own `main` layout with these changes:
 
 ```
 ┌──────────┬──────────────────────────────────────────────────────────────────┐
@@ -69,7 +69,7 @@ It refuses to overwrite a mod or layout of the same name that it didn't install.
 │          │                                               │   (on demand)    │
 │──────────│                                               │                  │
 │ Settings │                                               │                  │
-│ herdr-sab│                                               │                  │
+│ herdr-serhii│                                               │                  │
 │ settings │                                               │                  │
 │ Add mach.├───────────────────────────────────────────────┴──────────────────┤
 │          │ status bar                                                       │
@@ -86,9 +86,9 @@ Tab bar, left to right:
 | ↪ | `gcloud auth login` |
 | ⧉ | Open in editor ([§7](#7-open-in-editor)) |
 | Files · Changes · PR · Issues | Toggle the side panel ([§3](#3-the-side-panel)) |
-| ⚙ | herdr-sab settings ([§9](#9-settings)) |
+| ⚙ | herdr-serhii settings ([§9](#9-settings)) |
 
-The sidebar footer gains **herdr-sab settings** under Herdr's **Settings**.
+The sidebar footer gains **herdr-serhii settings** under Herdr's **Settings**.
 
 ---
 
@@ -105,11 +105,11 @@ A hidden panel does no work: it doesn't run git or `gh` and catches up when you 
 **Switching accounts.** The PR and Issues headers show the account in use (an initial and a login). Click it for the account menu:
 
 - **Automatic**: the first account that can see the repository (it says which).
-- **A login**: read this repository with it. That pins the repository (`github.repos` in `sab.json`).
+- **A login**: read this repository with it. That pins the repository (`github.repos` in `serhii.json`).
 - **Add an account…** runs `gh auth login` in a new tab. `gh` makes the new account active.
 - **Account settings…** opens settings → GitHub, which lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too) and the pinned repositories.
 
-A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-org": "login"}`) still work from `sab.json`. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
+A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-org": "login"}`) still work from `serhii.json`. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
 
 ### Files
 
@@ -189,13 +189,13 @@ Hover a tab to see the full name, such as `WEB-142 · Fix the login redirect`.
 
 **A name you type always wins.** Double-click the tab or press `F2`. To go back to the automatic name, rename the tab to nothing.
 
-Tabs that herdr-sab creates (agent tasks, issue **Start**) get names such as `#214 Review` or `#123`. These count as typed names, so they don't change.
+Tabs that herdr-serhii creates (agent tasks, issue **Start**) get names such as `#214 Review` or `#123`. These count as typed names, so they don't change.
 
 Nothing is written to Herdr: automatic names are only drawn, so other layouts show Herdr's own names.
 
 Settings: turn automatic names off, or choose the sources (Jira keys, GitHub numbers, agent title).
 
-**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://your-site.atlassian.net`); it's empty by default, and the links only appear once it's set. Then every Jira key herdr-sab shows becomes a link to `https://your-site.atlassian.net/browse/DS-1234`:
+**Open the Jira ticket.** Set your Jira site in settings → Tab bar (for example `https://your-site.atlassian.net`); it's empty by default, and the links only appear once it's set. Then every Jira key herdr-serhii shows becomes a link to `https://your-site.atlassian.net/browse/DS-1234`:
 
 - **Tabs**: a key in the tab's name, its agent's title, its branch or its folder gives the active tab a ticket button; `⌘⌥J` opens it.
 - **Pull requests**: chips for keys in the title or branch, in the header and on each row of the open list; keys in the description become links; chips under comments and review threads that mention one.
@@ -213,7 +213,7 @@ A Claude Code tab shows a small `42%`: how full that conversation's context wind
 - It turns **red** at 80% or more (configurable).
 - It is **dimmed** when the agent is idle or the reading is more than 10 minutes old (configurable). The tooltip shows the age, e.g. `Context 42% used, 58% left · of 1000k tokens · Opus 5.5 · last reading 6 min ago`.
 
-**Where the number comes from.** Claude Code reports context only to its **status line**. herdr-sab reads a snapshot of what the status line receives: a file named `claude-statusline.json` in one of the snapshot folders (default `~/.harp` and `~/.local/state/herdr/plugins/herdr-agent-usage`).
+**Where the number comes from.** Claude Code reports context only to its **status line**. herdr-serhii reads a snapshot of what the status line receives: a file named `claude-statusline.json` in one of the snapshot folders (default `~/.harp` and `~/.local/state/herdr/plugins/herdr-agent-usage`).
 
 If you don't have such a status line, add one to `~/.claude/settings.json`. This one saves the snapshot and prints nothing:
 
@@ -228,7 +228,7 @@ If you don't have such a status line, add one to `~/.claude/settings.json`. This
 
 If you already have a status line, add a `tee` of its input to that file. If you use herdr-agent-usage, its folder is already a default.
 
-**How a reading finds its tab.** The snapshot holds only the conversation that drew last, so herdr-sab checks it every 3 s and **keeps the last reading of every conversation** (by `session_id`). A reading belongs to a Claude Code pane when:
+**How a reading finds its tab.** The snapshot holds only the conversation that drew last, so herdr-serhii checks it every 3 s and **keeps the last reading of every conversation** (by `session_id`). A reading belongs to a Claude Code pane when:
 
 1. the pane's title matches the conversation's name; or
 2. that pane is the only Claude Code pane in the reading's folder.
@@ -307,7 +307,7 @@ Right-click the file in **Files** → **Preview in the panel**. It refreshes as 
 
 ## 9. Settings
 
-Open **herdr-sab settings** from:
+Open **herdr-serhii settings** from:
 
 - the sidebar footer, under Herdr's **Settings**;
 - the tab bar's ⚙;
@@ -315,7 +315,7 @@ Open **herdr-sab settings** from:
 
 It looks like Herdr's own Settings and saves as you click. There is no Save button.
 
-> **Why not inside Herdr's Settings?** Herdr's Settings window has a fixed list of sections and is rewritten on every start, so a mod can't add a section to it. herdr-sab settings is its sibling and links back (**Herdr settings…**).
+> **Why not inside Herdr's Settings?** Herdr's Settings window has a fixed list of sections and is rewritten on every start, so a mod can't add a section to it. herdr-serhii settings is its sibling and links back (**Herdr settings…**).
 
 ### Every setting
 
@@ -352,11 +352,11 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Catch an expired login | on | network: `print-access-token` |
 | | Login command | `auth login` | args after `gcloud` |
 
-Only in `sab.json` (fine as they are for most people): `pr.refreshSeconds` (60), `issues.refreshSeconds` (120), `gcloud.refreshMinutes` (2), `gcloud.tokenCheckMinutes` (10), `context.staleMinutes` (10), `github.accounts` (owner pins).
+Only in `serhii.json` (fine as they are for most people): `pr.refreshSeconds` (60), `issues.refreshSeconds` (120), `gcloud.refreshMinutes` (2), `gcloud.tokenCheckMinutes` (10), `context.staleMinutes` (10), `github.accounts` (owner pins).
 
 ### The settings file
 
-The file is `~/.config/herdr-app/sab.json`. It holds **only what you changed**, so new defaults in later versions still reach you. You can edit it by hand: herdr-sab rereads it every ~3 s. If it isn't valid JSON, the last good settings stay and a notification says why.
+The file is `~/.config/herdr-app/serhii.json`. It holds **only what you changed**, so new defaults in later versions still reach you. You can edit it by hand: herdr-serhii rereads it every ~3 s. If it isn't valid JSON, the last good settings stay and a notification says why.
 
 ```json
 {
@@ -370,7 +370,7 @@ The file is `~/.config/herdr-app/sab.json`. It holds **only what you changed**, 
 }
 ```
 
-All keys and defaults are in [`sab/shared/config.js`](../sab/shared/config.js).
+All keys and defaults are in [`serhii/shared/config.js`](../serhii/shared/config.js).
 
 ### Custom prompts
 
@@ -389,7 +389,7 @@ Replace any agent task's first message with `prompts.<task>`. The tasks are `rev
 
 ## 10. Troubleshooting
 
-**Check first.** `herdr-app status` lists errors from layouts and mods; `errors: []` means none. `herdr-app check ~/.config/herdr-app/mods/sab-tabs` (or any sab mod) loads a mod once and prints what is wrong.
+**Check first.** `herdr-app status` lists errors from layouts and mods; `errors: []` means none. `herdr-app check ~/.config/herdr-app/mods/serhii-tabs` (or any serhii mod) loads a mod once and prints what is wrong.
 
 | Symptom | Cause and fix |
 |---|---|
@@ -402,7 +402,7 @@ Replace any agent task's first message with `prompts.<task>`. The tasks are `rev
 | gcloud chip red right after logging in | Wait ~10 s, or click the chip. Running `gcloud auth print-access-token` in a terminal shows the real error. |
 | gcloud chip missing | `gcloud` isn't on Herdr's PATH, or it is turned off in settings. |
 | Panel buttons gone | Turned off in settings → Side panels. |
-| Settings don't stick | Check that `~/.config/herdr-app/sab.json` is valid JSON; a notification says so if it isn't. |
+| Settings don't stick | Check that `~/.config/herdr-app/serhii.json` is valid JSON; a notification says so if it isn't. |
 | Something is badly wrong | `ctrl-shift-l` switches layouts. `ctrl-alt-shift-escape` is Herdr's escape hatch: it always goes back to `main`. |
 
 ---
@@ -410,40 +410,40 @@ Replace any agent task's first message with `prompts.<task>`. The tasks are `rev
 ## 11. How it is built
 
 ```
-sab/
-  layouts/sab.json        Herdr's main layout; tabs → sab-tabs, footer → sab-chrome,
+serhii/
+  layouts/serhii.json        Herdr's main layout; tabs → serhii-tabs, footer → serhii-chrome,
                           panel-body stack holds the five panels
-  keys.json               layout:sab keys, merged by the installer
+  keys.json               layout:serhii keys, merged by the installer
   shared/config.js        settings defaults + load/save; copied into each mod
   mods/
-    sab-tabs/             tab bar: names, context, gcloud, buttons; publishes sab.json
+    serhii-tabs/             tab bar: names, context, gcloud, buttons; publishes serhii.json
       context.js          status-line snapshot readings
-    sab-panel/            one mod, five panels chosen by props.panel
+    serhii-panel/            one mod, five panels chosen by props.panel
       files.js changes.js pr.js issues.js preview.js lib.js icons/
-    sab-open-with/        the editor picker
-    sab-settings/         the settings window
-    sab-chrome/           Herdr's sidebar footer + "herdr-sab settings"
+    serhii-open-with/        the editor picker
+    serhii-settings/         the settings window
+    serhii-chrome/           Herdr's sidebar footer + "herdr-serhii settings"
 scripts/
   install.sh              install / --dry-run / --remove
-  sync-shared.sh          copies sab/shared/*.js into the mods
+  sync-shared.sh          copies serhii/shared/*.js into the mods
 docs/GUIDE.md             this guide
 ```
 
 **Design notes**
 
-- **Panels are stack children, not mounted on demand.** `sab-tabs` uses `layout.select` / `layout.show` / `layout.hide`, as Herdr's own tab bar does, and never rewrites the layout tree. A hidden panel stays alive, so each panel checks `isShown(id)` before reading git or GitHub.
-- **Settings flow.** `sab-tabs` (always on screen) reads `sab.json` every 3 s and publishes it as shared `sab.settings`. Every mod reads `cfg()` (defaults with the file laid over them) and re-renders when it changes. `sab-settings` writes the file, as a diff from the defaults, and publishes at once.
-- **Shared code.** Herdr mods can't import each other's files, so `sab/shared/config.js` is copied into each mod by `scripts/sync-shared.sh`. Edit only the shared copy, then run the script (`install.sh` runs it too).
+- **Panels are stack children, not mounted on demand.** `serhii-tabs` uses `layout.select` / `layout.show` / `layout.hide`, as Herdr's own tab bar does, and never rewrites the layout tree. A hidden panel stays alive, so each panel checks `isShown(id)` before reading git or GitHub.
+- **Settings flow.** `serhii-tabs` (always on screen) reads `serhii.json` every 3 s and publishes it as shared `serhii.settings`. Every mod reads `cfg()` (defaults with the file laid over them) and re-renders when it changes. `serhii-settings` writes the file, as a diff from the defaults, and publishes at once.
+- **Shared code.** Herdr mods can't import each other's files, so `serhii/shared/config.js` is copied into each mod by `scripts/sync-shared.sh`. Edit only the shared copy, then run the script (`install.sh` runs it too).
 - **No spinners.** Working states use slow `.loop("opacity")` dots. A `.spin()` redraws the whole window constantly.
 
 **Developing**
 
 ```sh
 scripts/sync-shared.sh
-for m in sab/mods/*; do herdr-app check "$PWD/$m"; done
+for m in serhii/mods/*; do herdr-app check "$PWD/$m"; done
 scripts/install.sh                      # Herdr hot-reloads the mods
 herdr-app status                        # errors: []
-herdr-app shot /tmp/sab.png             # last rendered frame (bring Herdr to front first)
+herdr-app shot /tmp/serhii.png             # last rendered frame (bring Herdr to front first)
 ```
 
 Read `~/.config/herdr-app/AGENTS.md` and the `.d.ts` files next to it for Herdr's mod API; they match your installed version.

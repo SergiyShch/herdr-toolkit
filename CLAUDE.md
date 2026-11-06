@@ -1,4 +1,7 @@
-# herdr-sab
+# herdr-serhii
+
+A personal fork of [herdr-sab](https://github.com/thabti/herdr-sab). Upstream is the `upstream` git remote;
+it installs as the `serhii` layout with `serhii-*` mods, so it can sit next to herdr-sab.
 
 A layout plus five mods for the Herdr desktop app (plain ES modules, no build step).
 User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file map and design notes.
@@ -9,24 +12,24 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - **Keep this file current.** Every change that adds a feature, setting, convention or gotcha updates this file in the same commit.
 - **Docs move with code.** A user-visible change also updates `docs/GUIDE.md` (feature section plus the settings table) and the README's "What you get" list when it's a headline feature.
 - After a change: run `scripts/install.sh`. It syncs shared files, copies the mods into `~/.config/herdr-app`, and runs `herdr-app check` on each one. Herdr hot-reloads the mods.
-- To force a reload: `herdr-app do layout.switch --name sab`. Check the result with `herdr-app status` (`"errors": []`) and `herdr-app shot <png>`. Never restart the user's app or `hc`.
+- To force a reload: `herdr-app do layout.switch --name serhii`. Check the result with `herdr-app status` (`"errors": []`) and `herdr-app shot <png>`. Never restart the user's app or `hc`.
 
 ## Code rules
 
-- **Shared code.** Herdr mods can't import each other. Edit `sab/shared/*.js` only, then run `scripts/sync-shared.sh`, which copies it into `sab-tabs`, `sab-panel` and `sab-settings`. Never edit the copies.
+- **Shared code.** Herdr mods can't import each other. Edit `serhii/shared/*.js` only, then run `scripts/sync-shared.sh`, which copies it into `serhii-tabs`, `serhii-panel` and `serhii-settings`. Never edit the copies.
 - **Settings.**
-  - A new setting gets a default in `DEFAULTS` (`sab/shared/config.js`) with a comment.
-  - Add a control in `sab/mods/sab-settings/main.js` (`toggle` / `stepper` / `choice` / `chips`) and a row in the GUIDE settings table.
+  - A new setting gets a default in `DEFAULTS` (`serhii/shared/config.js`) with a comment.
+  - Add a control in `serhii/mods/serhii-settings/main.js` (`toggle` / `stepper` / `choice` / `chips`) and a row in the GUIDE settings table.
   - Read settings through `cfg()`.
 - **API reference.** `gpui-kit.d.ts` in each mod is the SDK reference (`herdr`, `gpui-kit`, `gpui-base`). It's gitignored, so grep it for an element method before using it.
-- **Panels** (`sab/mods/sab-panel/*.js`) stay alive while hidden:
+- **Panels** (`serhii/mods/serhii-panel/*.js`) stay alive while hidden:
   - Gate reads on `isShown(this.id)`.
   - Capture `key()` before any await and drop the result when it changed (the user moved to another pane).
   - Pass `{ cwd, on }` to every `exec`; `on` is a remote machine or null.
   - `watchFolder` is local-only.
 - **Git safety.** Commit only the listed files (`--literal-pathspecs add -A -- <paths>`), never `git add -A` on the whole tree. Pushes go through `sh -c 'GIT_TERMINAL_PROMPT=0 exec git "$@"'` so they fail instead of waiting on a hidden prompt.
 - **GitHub.** Run gh through `ghAs(account, …)` with the account from `ghAccount(root, on)`, which picks the logged-in account that can see the repo.
-- **Derived files.** Each one keeps its "Derived from / Modified by" header. Add a `Modified for herdr-sab:` line when you change what it does.
+- **Derived files.** Each one keeps its "Derived from / Modified by" header. Add a `Modified for herdr-serhii:` line when you change what it does.
 - **Style.** No spinners: use slow `.loop("opacity")` dots, because `.spin()` redraws the whole window.
 
 ## Changes panel (`changes.js`)

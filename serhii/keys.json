@@ -1,0 +1,8 @@
+{
+  "layout:serhii": {
+    "cmd-shift-o": "mod.open:serhii-open-with",
+    "cmd-alt-g": "serhii-tabs.gcloud-login",
+    "cmd-alt-,": "mod.open:serhii-settings",
+    "cmd-alt-j": "serhii-tabs.jira-open"
+  }
+}
