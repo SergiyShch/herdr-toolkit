@@ -62,7 +62,7 @@ It refuses to overwrite a mod or layout of the same name that it didn't install.
 
 ```
 ┌──────────┬──────────────────────────────────────────────────────────────────┐
-│ Spaces   │ [tabs…] + │ ☁ ● project ↪ │ ⧉ Files Changes Git PR Issues ⚙ │
+│ Spaces   │ [tabs…]  +  │ ☁ ● project ↪ │ ⧉  Files Changes Git PR Issues ⚙   │
 │          ├───────────────────────────────────────────────┬──────────────────┤
 │          │                                               │                  │
 │ Agents   │              your panes                       │   side panel     │
