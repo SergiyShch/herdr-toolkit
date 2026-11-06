@@ -123,6 +123,7 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 
 - Every uncommitted change in the repository, with `+added −removed` per file and in total.
 - The first file's diff shows straight away. Click another file to see its diff; click it again to close.
+- **Side by side.** Double-click a file, or press the split icon on the open file's row, to compare it in a large dialog, as an IDE does: the last commit (HEAD) on the left, the working tree on the right, scrolling together. Changed lines are blue, with the part that differs marked; removed lines red, added lines green. Unchanged runs fold away (click a fold to show it); the **Changes only / Whole file** button switches modes and is remembered. **F7** / **Shift+F7** (or ↓ / ↑) jump between changes. It reads the file again on every save. Esc closes it.
 - **Commit** commits only the files listed, never `git add -A` on the whole tree. You can turn committing off in settings.
 - **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account that can see the repository. Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
 - **A folder of repositories.** When the pane's folder isn't a repository but holds several (`~/work/client/api`, `~/work/client/web`…), the panel finds them (up to 100), up to 2 folders deep (hidden folders, `node_modules`, `vendor`, `dist`, `build` and `target` are skipped), and shows one section per repository with its branch and `+added −removed`. Click a section's header to fold it.
@@ -418,8 +419,8 @@ serhii/
   mods/
     serhii-tabs/             tab bar: names, context, gcloud, buttons; publishes serhii.json
       context.js          status-line snapshot readings
-    serhii-panel/            one mod, five panels chosen by props.panel
-      files.js changes.js pr.js issues.js preview.js lib.js icons/
+    serhii-panel/            one mod, five panels chosen by props.panel (+ diff.js, the side-by-side dialog)
+      files.js changes.js diff.js pr.js issues.js preview.js lib.js icons/
     serhii-open-with/        the editor picker
     serhii-settings/         the settings window
     serhii-chrome/           Herdr's sidebar footer + "herdr-serhii settings"

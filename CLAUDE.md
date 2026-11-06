@@ -50,6 +50,13 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
   - It returns `{ url, existed }`.
   - The button shows only when the branch isn't `defaultBranch()` and `ahead > 0`.
 
+## Side-by-side diff (`diff.js`)
+
+- Opened by Changes (double-click a file, or the split icon on the open row) as a dialog: `openOverlay({ mod: "serhii-panel", kind: "dialog", props: { panel: "diff", root, path, on, fresh, hasHead, status } })`. `main.js` maps `panel: "diff"` to it; it is not in the `panel-body` stack.
+- One `git diff HEAD -U1000000` call gives both whole files; `sideBySide()` pairs `-`/`+` runs into rows, so one virtual list scrolls both halves.
+- Gotchas: a vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
+- "Whole file" vs "Changes only" persists in shared `serhii.diffWholeFile`.
+
 ## Testing without the app
 
 There is no test suite. To exercise a panel's logic, run it in Node with stub modules:

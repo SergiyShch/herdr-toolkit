@@ -2,14 +2,15 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-changes.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-changes; one of the kanso-panel mod's panels.
-// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown.
+// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; opens a file side by side.
 // A folder that is not a repository but holds several (~/work/client/api,
 // ~/work/client/web…) shows each one's changes in its own section, with a
 // filter per repository, and commits to one repository at a time.
+// A file opens side by side (HEAD | working tree) in a dialog: diff.js.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, settings, home, notify } from "herdr";
-import { location, key, diffRows, insideRoot, isShown, cfg, createPr, defaultBranch, showPanel, openUrl } from "./lib.js";
+import { exec, readTextFile, watchFolder, theme, settings, home, notify, openOverlay } from "herdr";
+import { location, key, diffRows, insideRoot, isShown, cfg, createPr, defaultBranch, showPanel, openUrl, ICON } from "./lib.js";
 
 const countLines = (text) => text ? text.split("\n").length - Number(text.endsWith("\n")) : 0;
 // Lines added and removed, read live: an untracked file's count fills in once its diff loads.
@@ -268,6 +269,12 @@ export class Changes {
     this.diffWidth = Math.max(300, ...lines.map(line => line.length * 7 + 50));
   }
 
+  // The file's last commit and working tree side by side, in a dialog (diff.js).
+  sideBySide(repo, f) {
+    openOverlay({ mod: "serhii-panel", kind: "dialog", width: 0.94, height: 0.9,
+      props: { panel: "diff", root: repo.root, path: f.path, on: repo.on ?? null, fresh: f.fresh, hasHead: repo.hasHead, status: f.status } });
+  }
+
   isOpen(root, path) { return this.open?.root === root && this.open?.path === path; }
 
   pick(root, path, cx) {
@@ -363,10 +370,15 @@ export class Changes {
   fileRow(repo, f, t) {
     const parts = f.path.split("/"), name = parts.pop(), indent = this.multi ? 18 : 0;
     return h_flex().id(`change-${repo.name}/${f.path}`).h(ROW).flex_none().pl(8 + indent).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
-      .when(this.isOpen(repo.root, f.path), (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.pick(repo.root, f.path, cx))
+      .when(this.isOpen(repo.root, f.path), (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
+      .on_click((e, cx) => { if (e.click_count > 1) { if (!this.isOpen(repo.root, f.path)) this.pick(repo.root, f.path, cx); this.sideBySide(repo, f); } else this.pick(repo.root, f.path, cx); })
       .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" || f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
       .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
-      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
+      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)))
+      .when(this.isOpen(repo.root, f.path), (e) => e.child(div().id(`change-split-${repo.name}/${f.path}`).p(3).rounded(5).flex_none().cursor_pointer().text_color(t.muted)
+        .tooltip("Compare side by side (double-click the file)").hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .on_click((_e, cx) => { cx.stop_propagation(); this.sideBySide(repo, f); })
+        .child(svg(`${ICON}split-right.svg`).size(13))));
   }
 
   // A repository's section header: click to fold it.
