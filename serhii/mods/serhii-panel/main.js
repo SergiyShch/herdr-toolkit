@@ -1,6 +1,6 @@
-// herdr-serhii's right side panel. One mod, five panels chosen by `props.panel`:
+// herdr-serhii's right side panel. One mod, six panels chosen by `props.panel`:
 // "files" (a lazy file browser with Markdown and code preview), "changes"
-// (git status, diffs and a commit), "pr" (pull requests: every open one, with
+// (git status, diffs and a commit), "git" (worktrees, branches, commit graph), "pr" (pull requests: every open one, with
 // checks, threads, reviewers, labels, merge and agent tasks), "issues" (the
 // repository's open GitHub issues) and "preview" (one file, chosen with
 // shared "serhii.preview"). Each is a child of the `panel-body` stack; serhii-tabs
@@ -15,8 +15,9 @@ import { PullRequest } from "./pr.js";
 import { Issues } from "./issues.js";
 import { Preview } from "./preview.js";
 import { Diff } from "./diff.js";
+import { Git } from "./git.js";
 
-const PANELS = { files: Files, changes: Changes, pr: PullRequest, issues: Issues, preview: Preview, diff: Diff };
+const PANELS = { files: Files, changes: Changes, git: Git, pr: PullRequest, issues: Issues, preview: Preview, diff: Diff };
 
 export default class Panel extends View {
   init(_props, cx) {

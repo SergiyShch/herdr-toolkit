@@ -14,7 +14,7 @@
 //   in the chip, account and project in the tooltip; the small button beside it
 //   runs `gcloud auth login` in a new tab (also cmd-alt-g).
 // - Open in editor (cmd-shift-o): the serhii-open-with popup for the focused pane.
-// - Panel buttons: Files, Changes, PR, Issues toggle the right side panel
+// - Panel buttons: Files, Changes, Git, PR, Issues toggle the right side panel
 //   (`panel` / `panel-body` in layouts/serhii.json); remembered per space.
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -27,6 +27,7 @@ const ICON = "mods/serhii-panel/icons/";
 const PANELS = [
   { id: "files", label: "Files", icon: "file" },
   { id: "changes", label: "Changes", icon: "changes" },
+  { id: "git", label: "Git", icon: "branch" },
   { id: "pr", label: "PR", icon: "pull-request" },
   { id: "issues", label: "Issues", icon: "issue" },
 ];

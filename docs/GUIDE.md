@@ -62,7 +62,7 @@ It refuses to overwrite a mod or layout of the same name that it didn't install.
 
 ```
 ┌──────────┬──────────────────────────────────────────────────────────────────┐
-│ Spaces   │ [tabs…]  +  │ ☁ ● project ↪ │ ⧉  Files  Changes  PR  Issues  ⚙ │
+│ Spaces   │ [tabs…] + │ ☁ ● project ↪ │ ⧉ Files Changes Git PR Issues ⚙ │
 │          ├───────────────────────────────────────────────┬──────────────────┤
 │          │                                               │                  │
 │ Agents   │              your panes                       │   side panel     │
@@ -85,7 +85,7 @@ Tab bar, left to right:
 | ☁ ● project | gcloud chip: click to check again ([§6](#6-gcloud-login)) |
 | ↪ | `gcloud auth login` |
 | ⧉ | Open in editor ([§7](#7-open-in-editor)) |
-| Files · Changes · PR · Issues | Toggle the side panel ([§3](#3-the-side-panel)) |
+| Files · Changes · Git · PR · Issues | Toggle the side panel ([§3](#3-the-side-panel)) |
 | ⚙ | herdr-serhii settings ([§9](#9-settings)) |
 
 The sidebar footer gains **herdr-serhii settings** under Herdr's **Settings**.
@@ -130,6 +130,16 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
   - The chips under the title filter the list: **All**, or one repository. Repositories without changes are left out of **All**.
   - **Commit** and **Create PR** go to one repository: the one picked in the chips, else the one whose diff is open. The line above the message says which. A repository with no changes but commits ahead of its base (`↑2`) still shows, ready for its pull request.
   - Turn it off, or look deeper, in settings → Panels.
+
+### Git
+
+The repository of the pane you're in, at a glance. It only reads git: it never checks out, fetches or changes anything.
+
+- **The checked-out branch** sits in the header (or `detached`).
+- **Worktrees** (when there is more than one): each with its branch and folder; the pane's own is highlighted. Click another to open a new tab in it.
+- **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to find its tip in the graph. Click **Branches** to fold the list.
+- **Graph**: `git log --graph` of **All branches** (local, remote, tags) or **This branch**, with a label per branch (the checked-out one is `● name`, remote ones blue, tags yellow). Hover a commit for its author and full subject.
+- It reads again on every commit, checkout, fetch or branch change (the repository's git folder, on this computer), and every 15 s.
 
 ### Pull requests (PR)
 
@@ -329,10 +339,11 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Open in Finder | on | the focused pane's folder |
 | | Open in editor | on | `⌘⇧O` works either way |
 | | Labels beside icons | on | Off: icons only |
-| **Panels** | Files · Changes · Pull requests · Issues | Issues off | chips; off: no button |
+| **Panels** | Files · Changes · Git · Pull requests · Issues | Issues off | chips; off: no button |
 | | Commit from Changes | on | |
 | | Create PR from Changes | on | push + `gh pr create --fill` |
 | | Create pull requests as drafts | on | Changes and PR panels |
+| | Git graph shows | 300 commits | 100 to 2000, every branch or only the checked-out one |
 | | Repositories in subfolders | on | a folder that isn't a repository shows each one inside it |
 | | Look for them | 2 deep | 1 to 5 folders below the pane's folder |
 | | Pull request sections | all on | Description · People · Checks · Threads · Comments · Agent · Files |
@@ -419,8 +430,8 @@ serhii/
   mods/
     serhii-tabs/             tab bar: names, context, gcloud, buttons; publishes serhii.json
       context.js          status-line snapshot readings
-    serhii-panel/            one mod, five panels chosen by props.panel (+ diff.js, the side-by-side dialog)
-      files.js changes.js diff.js pr.js issues.js preview.js lib.js icons/
+    serhii-panel/            one mod, six panels chosen by props.panel (+ diff.js, the side-by-side dialog)
+      files.js changes.js git.js diff.js pr.js issues.js preview.js lib.js icons/
     serhii-open-with/        the editor picker
     serhii-settings/         the settings window
     serhii-chrome/           Herdr's sidebar footer + "herdr-serhii settings"

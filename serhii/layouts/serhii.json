@@ -168,6 +168,16 @@
                       }
                     },
                     {
+                      "id": "git",
+                      "type": "block",
+                      "content": {
+                        "mod": "serhii-panel",
+                        "props": {
+                          "panel": "git"
+                        }
+                      }
+                    },
+                    {
                       "id": "pr",
                       "type": "block",
                       "content": {

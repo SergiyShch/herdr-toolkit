@@ -57,6 +57,14 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - Gotchas: a vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
 - "Whole file" vs "Changes only" persists in shared `serhii.diffWholeFile`.
 
+## Git panel (`git.js`)
+
+- A `panel-body` stack child (`git`), a tab-bar button (`serhii-tabs` `PANELS`), `panels.git` (on) and `git.graphLimit` (300).
+- One refresh = 5 git calls: `rev-parse --show-toplevel --git-common-dir --abbrev-ref HEAD`, then `worktree list --porcelain`, `for-each-ref refs/heads`, `remote` and `log --graph` in parallel. It watches the git common dir (local), so commits, checkouts and fetches in any worktree refresh it; plus a 15 s timer.
+- `log --format=%x01%h%x00%D…`: `\x01` splits the graph prefix from the fields. `parseGraph` / `parseRefs` / `parseWorktrees` are exported and pure, for Node tests.
+- Read-only on purpose: no checkout or fetch from the panel.
+- The Node stub for `herdr` also needs `appHome` and `writeTextFile` (config.js imports them).
+
 ## Testing without the app
 
 There is no test suite. To exercise a panel's logic, run it in Node with stub modules:

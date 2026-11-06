@@ -188,12 +188,15 @@ export default class Settings extends View {
     const pr = !c.panels.pr;
     return v_flex().w_full()
       .child(this.heading(t, "In the tab bar"))
-      .child(this.chips(t, "Panels", "GitHub panels read with gh only while shown", [["panels.files", "Files"], ["panels.changes", "Changes"], ["panels.pr", "Pull requests"], ["panels.issues", "Issues"]]))
+      .child(this.chips(t, "Panels", "GitHub panels read with gh only while shown", [["panels.files", "Files"], ["panels.changes", "Changes"], ["panels.git", "Git"], ["panels.pr", "Pull requests"], ["panels.issues", "Issues"]]))
       .child(this.toggle(t, "changes.commit", "Commit from Changes", "The message field and Commit button", !c.panels.changes))
       .child(this.toggle(t, "changes.createPr", "Create PR from Changes", "Beside Commit, on a branch with commits its base doesn't have: pushes it and runs gh pr create --fill", !c.panels.changes))
       .child(this.toggle(t, "pr.createDraft", "Create pull requests as drafts", "Create PR in the Changes and PR panels", !c.panels.changes && !c.panels.pr))
       .child(this.toggle(t, "changes.nested", "Repositories in subfolders", "A folder that is not a repository shows the changes of each one inside it, with a filter per repository", !c.panels.changes))
       .child(this.stepper(t, "changes.scanDepth", "Look for them", "Folders deep, below the pane's folder", { min: 1, max: 5, step: 1, unit: " deep", disabled: !c.panels.changes || !c.changes.nested }))
+      .child(div().h(18))
+      .child(this.heading(t, "Git"))
+      .child(this.stepper(t, "git.graphLimit", "Graph shows", "The latest commits, of every branch or only the checked-out one", { min: 100, max: 2000, step: 100, unit: " commits", disabled: !c.panels.git }))
       .child(div().h(18))
       .child(this.heading(t, "Pull requests"))
       .child(this.chips(t, "Sections", null, [["pr.sections.description", "Description"], ["pr.sections.people", "People"], ["pr.sections.checks", "Checks"],

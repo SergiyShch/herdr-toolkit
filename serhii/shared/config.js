@@ -39,7 +39,7 @@ export const DEFAULTS = {
     baseUrl: "",             // e.g. "https://your-site.atlassian.net": DS-1234 opens <baseUrl>/browse/DS-1234
     projects: [],            // e.g. ["DS", "WEB"]: only these keys count, and lowercase ds-1234 in branches too
   },
-  panels: { files: true, changes: true, pr: true, issues: false },
+  panels: { files: true, changes: true, git: true, pr: true, issues: false },
   github: {
     autoAccount: true,       // find the logged-in gh account that can see each repository
     accounts: {},            // pin by owner: { "my-org": "my-login" }
@@ -57,6 +57,7 @@ export const DEFAULTS = {
     tasks: { review: true, describe: true, explain: true, feedback: true, conflicts: true },
   },
   issues: { limit: 100, refreshSeconds: 120, startButton: true },
+  git: { graphLimit: 300 },  // commits the Git panel's graph reads (50–2000)
   changes: {
     commit: true,
     createPr: true,          // Create PR beside Commit: push the branch and gh pr create --fill
