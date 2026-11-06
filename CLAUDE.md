@@ -65,6 +65,15 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - Read-only on purpose: no checkout or fetch from the panel.
 - The Node stub for `herdr` also needs `appHome` and `writeTextFile` (config.js imports them).
 
+## Tab bar wrapping (`serhii-tabs`)
+
+- With `tabs.wrap` (on) the tabs sit in a `flex_wrap` row; its `on_size_change` height is the bar's height, applied with `layout.resize { id: "tabs", px }` (never under 42, the layout's one-row size). The root is `items_start` so that row measures its content, not the block.
+- The SDK has `gap_x`/`gap_y`, not `row_gap`.
+
+## Diff colours
+
+- Changed lines use the theme's ANSI hue at alpha `78` (≈47%): the theme's greens and reds are muted, so lower alphas barely show on dark. Changes rows also get a 3 px bar in the full hue; the side-by-side dialog marks the differing part at `c8`.
+
 ## Testing without the app
 
 There is no test suite. To exercise a panel's logic, run it in Node with stub modules:

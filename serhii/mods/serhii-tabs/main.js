@@ -14,6 +14,7 @@
 //   in the chip, account and project in the tooltip; the small button beside it
 //   runs `gcloud auth login` in a new tab (also cmd-alt-g).
 // - Open in editor (cmd-shift-o): the serhii-open-with popup for the focused pane.
+// - Tabs wrap onto more rows when they don't fit (tabs.wrap); the bar grows to fit.
 // - Panel buttons: Files, Changes, Git, PR, Issues toggle the right side panel
 //   (`panel` / `panel-body` in layouts/serhii.json); remembered per space.
 import { View, div, svg, image } from "gpui-kit";
@@ -24,6 +25,8 @@ import { cfg, readSettings, SHARED_KEY, jiraKey, jiraUrl } from "./config.js";
 import { shared, setShared, notify } from "herdr";
 
 const ICON = "mods/serhii-panel/icons/";
+// The bar's one-row height (the layout's tabs block).
+const BAR = 42;
 const PANELS = [
   { id: "files", label: "Files", icon: "file" },
   { id: "changes", label: "Changes", icon: "changes" },
@@ -349,10 +352,20 @@ export default class Tabs extends View {
     const sep = () => div().w(1).h(16).mx(4).flex_none().bg(t.border);
     const gcloud = this.gcloudChip(t, stop);
 
-    return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .on_mouse_up("left", () => { this.pressed = null; })
-      .on_scroll_wheel((e) => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
+    // Wrapped, the tabs take as many rows as they need and the bar's block
+    // follows their height (layout.resize); the buttons stay on the first row.
+    const wrap = o.tabs.wrap !== false;
+    if (!wrap && this.barPx && this.barPx !== BAR) { this.barPx = BAR; run("layout.resize", { id: "tabs", px: BAR }); }
+    const tabs = wrap
+      ? h_flex().id("tab-wrap").flex_1().min_w(0).flex_wrap().items_center().gap_x(3).gap_y(4).pt(6.5).pb(6.5)
+        .on_size_change((size) => {
+          const px = Math.max(BAR, Math.round(size.height));
+          if (px !== this.barPx) { this.barPx = px; run("layout.resize", { id: "tabs", px }); }
+        })
+        .children(shown.map(item))
+      : h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item));
+    const bar = (el) => wrap ? h_flex().h(BAR).flex_none().gap(3).items_center().child(el) : el;
+    const right = h_flex().flex_none().gap(3).items_center()
       .child(button("tab-new", svg(`${ICON}plus.svg`).size(15), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab"))
       .child(sep())
       .when(Boolean(gcloud), (el) => el.child(gcloud).when(o.tabs.editorButton || o.tabs.finderButton || PANELS.some((p) => o.panels[p.id] !== false), (el) => el.child(sep())))
@@ -364,5 +377,11 @@ export default class Tabs extends View {
         .child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))
         .child(button("close-window", svg(`${ICON}close.svg`).size(13), () => run("window.close"))));
+    return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_start().bg(t.chrome).border_b(1).border_color(t.border)
+      .on_mouse_up("left", () => { this.pressed = null; })
+      .on_scroll_wheel((e) => { if (!wrap && Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
+      .when(!wrap, (el) => el.items_center())
+      .child(tabs)
+      .child(bar(right));
   }
 }

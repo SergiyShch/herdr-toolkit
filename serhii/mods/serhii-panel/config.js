@@ -20,6 +20,7 @@ export const DEFAULTS = {
     editorButton: true,      // Open in editor button in the tab bar
     finderButton: true,      // Open in Finder button in the tab bar
     panelLabels: true,       // text beside the panel buttons' icons
+    wrap: true,              // tabs that don't fit go on a new row (the bar grows); off: they scroll
   },
   context: {
     enabled: true,           // Claude Code context % on tabs

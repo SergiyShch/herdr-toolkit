@@ -176,12 +176,12 @@ export class Diff {
     const tint = kind === "mod" ? t.ansi4 : left ? t.ansi1 : t.ansi2;
     const empty = !cell, changed = kind !== "same";
     return h_flex().flex_1().min_w(0).h(ROW).overflow_hidden()
-      .when(changed && !empty, (e) => e.bg(tint + "1c")).when(changed && empty, (e) => e.bg(t.raised))
-      .child(div().w(46).flex_none().pr(8).text_right().text_color(t.dim).child(cell ? String(cell.n) : ""))
+      .when(changed && !empty, (e) => e.bg(tint + "78")).when(changed && empty, (e) => e.bg(t.raised))
+      .child(div().w(46).flex_none().pr(8).text_right().text_color(changed && !empty ? tint : t.dim).child(cell ? String(cell.n) : ""))
       .child(!cell ? div() : parts
         ? h_flex().flex_1().min_w(0).overflow_hidden()
           .child(div().flex_none().whitespace_nowrap().child(parts[0]))
-          .child(div().flex_none().whitespace_nowrap().rounded(2).bg(tint + "48").child(parts[1]))
+          .child(div().flex_none().whitespace_nowrap().rounded(2).bg(tint + "c8").child(parts[1]))
           .child(div().flex_none().whitespace_nowrap().child(parts[2]))
         : div().flex_1().min_w(0).whitespace_nowrap().truncate().child(cell.text));
   }

@@ -2,7 +2,7 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-changes.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-changes; one of the kanso-panel mod's panels.
-// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; opens a file side by side.
+// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; opens a file side by side; brighter added/removed lines.
 // A folder that is not a repository but holds several (~/work/client/api,
 // ~/work/client/web…) shows each one's changes in its own section, with a
 // filter per repository, and commits to one repository at a time.
@@ -362,8 +362,10 @@ export class Changes {
 
   diffRow({ kind, number, text }, t) {
     if (kind === "@") return div().w_full().px(12).h(20).flex_none().truncate().bg(t.raised).text_color(t.dim).child(text);
-    return h_flex().w_full().h(20).flex_none().gap(10).when(kind === "+", (e) => e.bg(t.ansi2 + "18")).when(kind === "-", (e) => e.bg(t.ansi1 + "18"))
-      .child(div().w(30).flex_none().text_right().text_color(t.dim).child(number === undefined ? "" : String(number)))
+    // Added and removed lines in a clear tint, with a bar and a number in the full hue.
+    const hue = kind === "+" ? t.ansi2 : kind === "-" ? t.ansi1 : null;
+    return h_flex().w_full().h(20).flex_none().gap(10).when(Boolean(hue), (e) => e.bg(hue + "78").border_l(3).border_color(hue))
+      .child(div().w(hue ? 27 : 30).flex_none().text_right().text_color(hue ?? t.dim).child(number === undefined ? "" : String(number)))
       .child(div().flex_1().min_w(0).truncate().child(text));
   }
 

@@ -80,7 +80,7 @@ Tab bar, left to right:
 
 | Piece | What it does |
 |---|---|
-| Tabs | Self-naming ([§4](#4-tabs-that-name-themselves)). A Claude tab shows its context %. Click selects, drag reorders, double-click names, right-click opens Herdr's tab menu, and the mouse wheel moves between tabs. |
+| Tabs | Self-naming ([§4](#4-tabs-that-name-themselves)). A Claude tab shows its context %. Click selects, drag reorders, double-click names, right-click opens Herdr's tab menu. Tabs that don't fit wrap onto a new row and the bar grows (settings → Tabs; off, they scroll and the mouse wheel moves between tabs). |
 | `+` | Herdr's new-tab menu: a shell or any installed agent |
 | ☁ ● project | gcloud chip: click to check again ([§6](#6-gcloud-login)) |
 | ↪ | `gcloud auth login` |
@@ -336,6 +336,7 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Open in Finder | on | the focused pane's folder |
 | | Open in editor | on | `⌘⇧O` works either way |
 | | Labels beside icons | on | Off: icons only |
+| | Wrap tabs onto more rows | on | the bar grows a row at a time; off: tabs scroll sideways |
 | **Panels** | Files · Changes · Git · Pull requests · Issues | Issues off | chips; off: no button |
 | | Commit from Changes | on | |
 | | Create PR from Changes | on | push + `gh pr create --fill` |

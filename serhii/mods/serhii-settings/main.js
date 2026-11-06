@@ -173,6 +173,7 @@ export default class Settings extends View {
       .child(this.heading(t, "Tab names"))
       .child(this.toggle(t, "tabs.autoName", "Name tabs automatically", "A tab you haven't named shows its issue key or its agent's title. A name you type always wins."))
       .child(this.chips(t, "Use", null, [["tabs.issueKeyJira", "Jira keys"], ["tabs.issueKeyGithub", "GitHub #123"], ["tabs.agentTitle", "Agent title"]], off))
+      .child(this.toggle(t, "tabs.wrap", "Wrap tabs onto more rows", "Tabs that don't fit start a new row and the bar grows. Off: they scroll sideways."))
       .child(div().h(18))
       .child(this.heading(t, "Jira"))
       .child(this.text(t, "jira.baseUrl", "Jira site", "Every DS-1234 shown (tabs, pull requests, comments, issues, Markdown) links to <site>/browse/DS-1234. ⌘⌥J opens the tab's."))
