@@ -2,17 +2,17 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-changes.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-changes; one of the kanso-panel mod's panels.
-// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; opens a file side by side; brighter added/removed lines.
+// Modified for herdr-serhii: one of the serhii-panel mod's panels; reads only while shown; a click opens the file side by side (no diff in the panel).
 // A folder that is not a repository but holds several (~/work/client/api,
 // ~/work/client/web…) shows each one's changes in its own section, with a
 // filter per repository, and commits to one repository at a time.
-// A file opens side by side (HEAD | working tree) in a dialog: diff.js.
+// A file opens side by side (HEAD | working tree) in a dialog (diff.js);
+// the panel itself is only the list, with no diff under it.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, settings, home, notify, openOverlay } from "herdr";
-import { location, key, diffRows, insideRoot, isShown, cfg, createPr, defaultBranch, showPanel, openUrl, ICON } from "./lib.js";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { exec, watchFolder, theme, home, notify, openOverlay } from "herdr";
+import { location, key, insideRoot, isShown, cfg, createPr, defaultBranch, showPanel, openUrl } from "./lib.js";
 
-const countLines = (text) => text ? text.split("\n").length - Number(text.endsWith("\n")) : 0;
 // Lines added and removed, read live: an untracked file's count fills in once its diff loads.
 const total = (files, k) => files.reduce((n, f) => n + f[k], 0);
 const MAX_FILES = 1000, ROW = 28, MAX_WATCH = 20, RESCAN_MS = 30000, FULL_MS = 30000;
@@ -119,7 +119,7 @@ async function pool(items, n, fn) {
 export class Changes {
   init(cx) {
     this.repos = []; this.multi = false; this.filter = null; this.collapsed = new Set(); this.watching = new Set();
-    this.rows = []; this.diffWidth = 0; this.message = ""; this.handle = cx.focus_handle();
+    this.message = ""; this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "Commit message" });
     this.input.on("change", (_e, cx) => { this.message = this.input.value(); cx.notify(); });
     this.input.on("submit", (_e, cx) => this.commit(cx));
@@ -163,8 +163,8 @@ export class Changes {
   }
 
   reset() {
-    this.repos = []; this.multi = false; this.filter = null; this.collapsed = new Set(); this.scan = null; this.open = null; this.closed = false;
-    this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.clean = 0; this.prUrl = null;
+    this.repos = []; this.multi = false; this.filter = null; this.collapsed = new Set(); this.scan = null; this.open = null;
+    this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.clean = 0; this.prUrl = null;
     this.watching = new Set(); this.fullAt = 0; this.touched = null;
   }
 
@@ -206,23 +206,14 @@ export class Changes {
         if (this.filter && !repos.some((r) => r.root === this.filter)) this.filter = null;
         this.watch(repos.map((r) => r.root), cx);
         const repo = this.open && repos.find((r) => r.root === this.open.root);
-        if (this.open && !repo?.files.some((f) => f.path === this.open.path)) { this.open = null; this.setLines([]); }
-        // The first file's diff shows until you pick another.
-        if (!this.open && !this.closed) {
-          const first = this.shown().find((r) => r.files.length && !this.collapsed.has(r.root));
-          if (first) this.open = { root: first.root, path: first.files[0].path };
-        }
-        if (this.open) {
-          try { await this.load(this.open, context); }
-          catch { if (key() === context) this.setLines(["Cannot preview this diff (too large or unreadable)"]); }
-        }
+        if (this.open && !repo?.files.some((f) => f.path === this.open.path)) this.open = null;
       } catch (e) { if (key() === context) this.error = String(e?.message ?? e); }
       finally { this.loading = false; cx.notify(); }
     });
   }
 
   clear(error) {
-    this.repos = []; this.multi = false; this.open = null; this.setLines([]); this.error = error; this.clean = 0;
+    this.repos = []; this.multi = false; this.open = null; this.error = error; this.clean = 0;
   }
 
   // The repositories the list shows: the one picked, else every one with changes.
@@ -241,34 +232,6 @@ export class Changes {
     return changed.length === 1 ? changed[0] : null;
   }
 
-  async load({ root, path }, context) {
-    const repo = this.repos.find((r) => r.root === root), file = repo?.files.find((f) => f.path === path);
-    if (!file) return;
-    const on = repo.on;
-    let lines;
-    if (!insideRoot(path)) lines = ["Cannot preview this file"];
-    else if (file.fresh || (!repo.hasHead && file.status === "A")) {
-      const text = await readTextFile(`${root}/${path}`, { on }).catch(() => null);
-      if (text === null) lines = ["Cannot preview this file (binary, too large, or unreadable)"];
-      else if (text.includes("\0")) lines = ["Binary file · no text diff"];
-      else {
-        file.add = countLines(text);
-        lines = [`@@ -0,0 +1,${file.add} @@`, ...text.slice(0, 400000).replace(/\n$/, "").split("\n").slice(0, 1500).map(l => `+${l}`)];
-      }
-    } else {
-      const r = await exec("git", ["diff", ...(repo.hasHead ? ["HEAD"] : []), "--no-ext-diff", "--no-textconv", "--no-color", "--", path], { cwd: root, on });
-      if (r.code !== 0) throw new Error(r.stderr);
-      const all = r.stdout.replace(/\n$/, "").split("\n"), first = all.findIndex((l) => l.startsWith("@@"));
-      lines = first < 0 ? [file.binary ? "Binary file changed" : "No text diff available"] : all.slice(first);
-    }
-    if (key() === context && this.open?.root === root && this.open?.path === path) this.setLines(lines.slice(0, 1500).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line));
-  }
-
-  setLines(lines) {
-    this.rows = diffRows(lines);
-    this.diffWidth = Math.max(300, ...lines.map(line => line.length * 7 + 50));
-  }
-
   // The file's last commit and working tree side by side, in a dialog (diff.js).
   sideBySide(repo, f) {
     openOverlay({ mod: "serhii-panel", kind: "dialog", width: 0.94, height: 0.9,
@@ -277,21 +240,17 @@ export class Changes {
 
   isOpen(root, path) { return this.open?.root === root && this.open?.path === path; }
 
-  pick(root, path, cx) {
-    this.open = this.isOpen(root, path) ? null : { root, path }; this.setLines([]); this.note = null;
-    this.closed = !this.open;
-    const context = this.context, open = this.open;
-    if (open) cx.spawn(async (cx) => {
-      try { await this.load(open, context); }
-      catch (e) { if (key() === context && this.isOpen(root, path)) this.note = `Cannot preview this diff (too large or unreadable): ${e}`; }
-      cx.notify();
-    });
+  // Picks the file (Commit and Create PR follow its repository) and opens it side by side.
+  pick(repo, f, cx) {
+    this.open = { root: repo.root, path: f.path }; this.note = null;
+    if (!insideRoot(f.path)) this.note = "Cannot show this file";
+    else this.sideBySide(repo, f);
     cx.notify();
   }
 
   setFilter(root, cx) {
     this.filter = root; this.note = null;
-    if (root && this.open && this.open.root !== root) { this.open = null; this.closed = false; this.setLines([]); }
+    if (root && this.open && this.open.root !== root) this.open = null;
     if (root) this.collapsed.delete(root);
     this.refresh(cx);
     cx.notify();
@@ -360,27 +319,14 @@ export class Changes {
     cx.notify();
   }
 
-  diffRow({ kind, number, text }, t) {
-    if (kind === "@") return div().w_full().px(12).h(20).flex_none().truncate().bg(t.raised).text_color(t.dim).child(text);
-    // Added and removed lines in a clear tint, with a bar and a number in the full hue.
-    const hue = kind === "+" ? t.ansi2 : kind === "-" ? t.ansi1 : null;
-    return h_flex().w_full().h(20).flex_none().gap(10).when(Boolean(hue), (e) => e.bg(hue + "78").border_l(3).border_color(hue))
-      .child(div().w(hue ? 27 : 30).flex_none().text_right().text_color(hue ?? t.dim).child(number === undefined ? "" : String(number)))
-      .child(div().flex_1().min_w(0).truncate().child(text));
-  }
-
   fileRow(repo, f, t) {
     const parts = f.path.split("/"), name = parts.pop(), indent = this.multi ? 18 : 0;
     return h_flex().id(`change-${repo.name}/${f.path}`).h(ROW).flex_none().pl(8 + indent).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
       .when(this.isOpen(repo.root, f.path), (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
-      .on_click((e, cx) => { if (e.click_count > 1) { if (!this.isOpen(repo.root, f.path)) this.pick(repo.root, f.path, cx); this.sideBySide(repo, f); } else this.pick(repo.root, f.path, cx); })
+      .tooltip("Compare side by side").on_click((_e, cx) => this.pick(repo, f, cx))
       .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" || f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
       .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
-      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)))
-      .when(this.isOpen(repo.root, f.path), (e) => e.child(div().id(`change-split-${repo.name}/${f.path}`).p(3).rounded(5).flex_none().cursor_pointer().text_color(t.muted)
-        .tooltip("Compare side by side (double-click the file)").hover((s) => s.bg(t.hover).text_color(t.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.sideBySide(repo, f); })
-        .child(svg(`${ICON}split-right.svg`).size(13))));
+      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
   // A repository's section header: click to fold it.
@@ -441,16 +387,10 @@ export class Changes {
           .tooltip(this.clean ? `${this.clean} of them without changes` : "Every one has changes").child(`${this.repos.length} repos`)))
         .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
       .when(this.multi, (e) => e.child(this.filterChips(t)))
-      .child(v_flex().id("changes-list").flex_none().h(Math.min(this.multi ? 280 : 200, Math.max(44, items.length * ROW + 12))).overflow_y_scrollbar().p(6).border_b(1).border_color(t.border)
+      .child(v_flex().id("changes-list").flex_1().min_h(0).overflow_y_scrollbar().p(6)
         .children(items.map((it) => it.f ? this.fileRow(it.repo, it.f, t) : this.repoRow(it.repo, t)))
         .when(!files.length && !(this.multi && items.length), (e) => e.child(div().p(8).text_color(t.dim).child(empty))))
       .when(limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files of a repository")))
-      .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
-        .child(div().id("changes-diff-x").size_full().overflow_x_scrollbar()
-          .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list("changes-diff", this.rows.length, 20, (i) => String(i),
-            (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).size_full())))
-        .child(Scrollbar.vertical("changes-diff").viewport_from_layout().absolute().inset_0())
-        .when(!this.open && files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes"))))
       .when(Boolean(this.note), (e) => e.child(div().id("changes-note").px(10).py(6).text_size(11).text_color(this.prUrl ? t.ansi2 : t.ansi1)
         .when(Boolean(this.prUrl), (e) => e.cursor_pointer().tooltip("Open in the browser").on_click(() => openUrl(this.prUrl)))
         .child(this.note)))

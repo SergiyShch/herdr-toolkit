@@ -44,7 +44,8 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
     - `baseOf` caches each repo's base for 5 min; `aheadOf` caches the ahead count per HEAD.
     - A watch event re-reads only its own repo. The 10 s timer does a full multi-repo read at most every 30 s.
     - On 54 repos that is 2.4 s per refresh, down from 9.4 s.
-  - `readRepo` returns `{ root, name, files, branch, base, ahead }`. `target()` picks the repo for Commit and Create PR: the filter chip, else the repo of the open diff.
+  - `readRepo` returns `{ root, name, files, branch, base, ahead }`. `target()` picks the repo for Commit and Create PR: the filter chip, else the repo of the file last opened (`this.open`).
+- The panel is only the file list: a click opens the side-by-side dialog (`diff.js`); there is no diff under the list.
 - **Create PR** (`createPr` in `lib.js`, also used by the PR panel):
   - Pushes the branch (`-u origin HEAD` on the first push), then runs `gh pr create --fill [--draft] --head <branch>`.
   - It returns `{ url, existed }`.
@@ -52,7 +53,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 
 ## Side-by-side diff (`diff.js`)
 
-- Opened by Changes (double-click a file, or the split icon on the open row) as a dialog: `openOverlay({ mod: "serhii-panel", kind: "dialog", props: { panel: "diff", root, path, on, fresh, hasHead, status } })`. `main.js` maps `panel: "diff"` to it; it is not in the `panel-body` stack.
+- Opened by Changes (a click on a file) as a dialog: `openOverlay({ mod: "serhii-panel", kind: "dialog", props: { panel: "diff", root, path, on, fresh, hasHead, status } })`. `main.js` maps `panel: "diff"` to it; it is not in the `panel-body` stack.
 - One `git diff HEAD -U1000000` call gives both whole files; `sideBySide()` pairs `-`/`+` runs into rows, so one virtual list scrolls both halves.
 - Gotchas: a vertical virtual list takes its width from its first row, so rows get an explicit `.w(this.width)` from the root's `on_size_change` (`w_full` rows rendered blank in the first try). `FocusHandle.focus()` throws during render: focus from a timer.
 - "Whole file" vs "Changes only" persists in shared `serhii.diffWholeFile`.
@@ -72,7 +73,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 
 ## Diff colours
 
-- Changed lines use the theme's ANSI hue at alpha `78` (≈47%): the theme's greens and reds are muted, so lower alphas barely show on dark. Changes rows also get a 3 px bar in the full hue; the side-by-side dialog marks the differing part at `c8`.
+- Changed lines use the theme's ANSI hue at alpha `78` (≈47%): the theme's greens and reds are muted, so lower alphas barely show on dark. The side-by-side dialog marks the differing part at `c8`.
 
 ## Testing without the app
 

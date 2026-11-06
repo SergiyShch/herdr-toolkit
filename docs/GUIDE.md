@@ -120,13 +120,12 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 ### Changes
 
 - Every uncommitted change in the repository, with `+added −removed` per file and in total.
-- The first file's diff shows straight away. Click another file to see its diff; click it again to close.
-- **Side by side.** Double-click a file, or press the split icon on the open file's row, to compare it in a large dialog, as an IDE does: the last commit (HEAD) on the left, the working tree on the right, scrolling together. Changed lines are blue, with the part that differs marked; removed lines red, added lines green. Unchanged runs fold away (click a fold to show it); the **Changes only / Whole file** button switches modes and is remembered. **F7** / **Shift+F7** (or ↓ / ↑) jump between changes. It reads the file again on every save. Esc closes it.
+- **Click a file** to compare it side by side in a large dialog, as an IDE does: the last commit (HEAD) on the left, the working tree on the right, scrolling together. Changed lines are blue, with the part that differs marked; removed lines red, added lines green. Unchanged runs fold away (click a fold to show it); the **Changes only / Whole file** button switches modes and is remembered. **F7** / **Shift+F7** (or ↓ / ↑) jump between changes. It reads the file again on every save. Esc closes it.
 - **Commit** commits only the files listed, never `git add -A` on the whole tree. You can turn committing off in settings.
 - **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account that can see the repository. Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
 - **A folder of repositories.** When the pane's folder isn't a repository but holds several (`~/work/client/api`, `~/work/client/web`…), the panel finds them (up to 100), up to 2 folders deep (hidden folders, `node_modules`, `vendor`, `dist`, `build` and `target` are skipped), and shows one section per repository with its branch and `+added −removed`. Click a section's header to fold it.
   - The chips under the title filter the list: **All**, or one repository. Repositories without changes are left out of **All**.
-  - **Commit** and **Create PR** go to one repository: the one picked in the chips, else the one whose diff is open. The line above the message says which. A repository with no changes but commits ahead of its base (`↑2`) still shows, ready for its pull request.
+  - **Commit** and **Create PR** go to one repository: the one picked in the chips, else the one of the file you last opened. The line above the message says which. A repository with no changes but commits ahead of its base (`↑2`) still shows, ready for its pull request.
   - Turn it off, or look deeper, in settings → Panels.
 
 ### Git
