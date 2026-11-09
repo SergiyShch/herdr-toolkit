@@ -11,7 +11,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Input, InputState } from "gpui-base";
 import { exec, theme } from "herdr";
-import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips } from "./lib.js";
+import { location, key, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, accountKey, jiraChips } from "./lib.js";
 
 const FIELDS = "number,title,url,author,assignees,labels,updatedAt,comments,milestone";
 const limit = () => Math.max(1, Math.min(500, Number(cfg().issues.limit) || 100));
@@ -40,6 +40,7 @@ export class Issues {
     if (!isShown(this.id)) { this.stale = true; return; }
     this.stale = false;
     if (this.loading) return;
+    this.accountKey = accountKey();
     const { cwd, on } = location(), context = key();
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.repo = null; this.list = [];
@@ -157,7 +158,7 @@ export class Issues {
   }
 
   render(cx) {
-    if (isShown(this.id) && (this.stale || key() !== this.context)) this.refresh(cx);
+    if (isShown(this.id) && (this.stale || key() !== this.context || accountKey() !== this.accountKey)) this.refresh(cx);
     const c = tokens(theme());
     const me = this.viewer, here = branchIssue(this.branch);
     const list = this.filtered();

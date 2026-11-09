@@ -23,7 +23,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
-import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, jiraChips, linkJira, createPr } from "./lib.js";
+import { location, key, diffRows, isShown, ICON, G, tokens, ago, clock, labelColor, openUrl, startAgent, cfg, prompt, ghAs, ghAccount, forgetGhAccount, noAccess, NOT_FOUND, ghLogins, accountPicker, accountKey, jiraChips, linkJira, createPr } from "./lib.js";
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,comments,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
@@ -153,6 +153,7 @@ export class PullRequest {
     if (!isShown(this.id)) { this.stale = true; return; }
     this.stale = false;
     if (this.loading) return;
+    this.accountKey = accountKey();
     const { cwd, on } = location(), context = key();
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
@@ -828,7 +829,7 @@ export class PullRequest {
   }
 
   render(cx) {
-    if (isShown(this.id) && (this.stale || key() !== this.context)) this.refresh(cx);
+    if (isShown(this.id) && (this.stale || key() !== this.context || accountKey() !== this.accountKey)) this.refresh(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     let body;

@@ -152,30 +152,40 @@ export function setRepoAccount(repo, login) {
   return setSetting("github.repos", repos);
 }
 
+// What the account depends on besides the folder: the shown space and the
+// GitHub settings. A panel reads again when it changes (a link, an unpin, a
+// switch to another space).
+export const accountKey = () => JSON.stringify([location().space ?? null, cfg().github ?? null]);
+
 // The account menu in the PR and Issues panels' headers: which gh login the
-// shown space reads GitHub as. Picking one links the space to it (github.spaces);
-// "Unlink" goes back to automatic. "Log in to another account…" runs gh auth
-// login and links whatever login it adds. A repository pin (github.repos) still
-// wins; the menu says so and can remove it. Making a login gh's active one lives
-// in settings → GitHub. `p` is the panel: it has account, ghRepo, pinned, on,
+// shown space reads GitHub as. Picking one links the space to it
+// (github.spaces) and locks it: the menu then offers only "Unlink", and after
+// that any login again. "Log in to another account…" runs gh auth login and
+// links whatever login it adds. A repository pin (github.repos) still wins; the
+// menu says so and can remove it. Making a login gh's active one lives in
+// settings → GitHub. `p` is the panel: it has account, ghRepo, pinned, on,
 // logins and reload(cx).
 export function accountPicker(p, c, prefix) {
   const id = `${prefix}-gh`, list = p.logins ?? [];
   const space = spaces().find((s) => s.active) ?? null;
+  const spaceName = space?.name ?? "this space";
   const linked = spaceAccount(space?.id);
   const active = list.find((l) => l.active)?.login;
-  const who = p.account || active || "gh";
-  const why = p.pinned === "repo" ? "pinned for this repository" : p.pinned === "space" ? `linked to ${space?.name ?? "this space"}`
-    : p.pinned === "owner" ? "pinned for its owner" : "found automatically";
+  // From the settings as they are now, so a link shows before the panel reads again.
+  const pin = pinFor(p.ghRepo, space?.id);
+  const who = pin?.account ?? (p.account || active || "gh");
+  const why = pin?.pinned === "repo" ? "pinned for this repository" : pin?.pinned === "space" ? `locked to ${spaceName}`
+    : pin?.pinned === "owner" ? "pinned for its owner" : "found automatically";
   const avatar = (login, size = 18) => div().size(size).flex_none().flex().items_center().justify_center().rounded_full()
     .bg(c.subtle).border_1().border_color(c.border).text_size(size * 0.5).text_color(c.muted).child((login[0] ?? "?").toUpperCase());
+  const mark = pin?.pinned === "space" ? "lock" : pin?.pinned === "repo" ? "pin" : null;
   const trigger = Button.new(`${id}-trigger`).h(26).pl(4).pr(6).gap(6).flex_none().items_center().rounded(13).cursor_pointer()
     .border_1().border_color(p.accountOpen ? c.border : "#00000000")
     .accessibility_label(`GitHub account: ${who}`).tooltip(`Reading GitHub as ${who} (${why})`)
     .hover((s) => s.bg(c.subtle))
     .child(avatar(who))
     .child(div().max_w(110).truncate().text_size(12).text_color(c.text).child(who))
-    .when(p.pinned === "space" || p.pinned === "repo", (el) => el.child(svg(`${ICON}pin.svg`).size(10).text_color(c.dim)))
+    .when(Boolean(mark), (el) => el.child(svg(`${ICON}${mark}.svg`).size(11).text_color(c.muted)))
     .child(svg(`${ICON}chevron-down.svg`).size(11).text_color(c.dim));
   const popover = Popover.new(id).trigger(trigger).anchor("top_right").open(Boolean(p.accountOpen))
     .on_open_change((open, cx) => {
@@ -191,35 +201,39 @@ export function accountPicker(p, c, prefix) {
       .finally(() => cx.spawn(async (cx) => p.reload(cx)));
   };
   const link = (login, cx) => save(linkSpace(space?.id, login), cx);
-  // One choice: a check column, then what it is and a quiet second line.
-  const choice = (key, lead, title, sub, checked, onClick, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6)
-    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle))).when(disabled, (el) => el.opacity(0.5))
-    .accessibility_label(title).on_click((_e, cx) => { if (!disabled) onClick(cx); })
+  const icon = (name, color = c.muted) => div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}${name}.svg`).size(13).text_color(color));
+  // One row: what leads it, what it is with a quiet second line, then a mark (✓, a lock).
+  const row = (key, lead, title, sub, tail, onClick = null, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6)
+    .when(Boolean(onClick) && !disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle))).when(disabled, (el) => el.opacity(0.5))
+    .accessibility_label(title).on_click((_e, cx) => { if (onClick && !disabled) onClick(cx); })
     .child(lead)
     .child(v_flex().flex_1().min_w(0).gap(1)
       .child(div().truncate().text_size(12.5).text_color(c.text).child(title))
       .when(Boolean(sub), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(sub))))
-    .child(div().w(14).flex_none().text_size(12).text_color(c.text).child(checked ? "✓" : ""));
-  const icon = (name) => div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}${name}.svg`).size(13).text_color(c.muted));
-  const action = (key, name, title, sub, onClick) => choice(key, icon(name), title, sub, false, onClick);
-  const found = !p.pinned ? (p.account || active) : null;
-  const spaceName = space?.name ?? "this space";
-  return popover.content(v_flex().w(280).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
-    .child(div().px(8).pt(6).pb(6).text_size(11).text_color(c.dim).truncate().child(`GitHub account for the space ${spaceName}`))
-    .children(list.map((l, i) => choice(`l${i}`, avatar(l.login), l.login,
-      [l.active ? "gh's active account" : null, l.host !== "github.com" ? l.host : null, l.ok ? null : "login broken"].filter(Boolean).join(" · ") || null,
-      linked === l.login, (cx) => link(l.login, cx), !space || !l.ok)))
-    .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(11.5).text_color(c.dim).child(p.logins ? "gh is logged in to no account." : "Reading gh auth status…")))
-    .child(linked
-      ? action("unlink", "close", `Unlink from ${spaceName}`, "back to the first account that can see each repository", (cx) => link(null, cx))
-      : choice("auto", icon("refresh"), "Automatic", found ? `uses ${found}, the first that can see ${repo ?? "it"}` : "the first account that can see each repository", true, () => {}))
-    .child(action("add", "log-in", "Log in to another account…", `gh auth login, then it's linked to ${spaceName}`,
-      (cx) => { close(cx); addGhAccount(space?.id, { link: Boolean(space), on: p.on, cx, done: (cx) => p.reload(cx) }); }))
-    .when(p.pinned === "repo" && Boolean(repo), (el) => el
-      .child(div().mx(8).my(4).h(1).bg(c.border))
-      .child(action("unpin", "pin", `Unpin ${repo}`, `pinned to ${p.account}, which wins over the space`, (cx) => save(setRepoAccount(p.ghRepo, null), cx))))
-    .child(div().mx(8).my(4).h(1).bg(c.border))
-    .child(action("settings", "settings", "Account settings…", null, (cx) => { close(cx); openOverlay({ mod: "toolkit-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); })));
+    .child(div().w(14).flex_none().flex().justify_center().text_size(12).text_color(c.text).child(tail ?? ""));
+  const about = (l) => [l.active ? "gh's active account" : null, l.host !== "github.com" ? l.host : null, l.ok ? null : "login broken"].filter(Boolean).join(" · ") || null;
+  const rule = () => div().mx(8).my(4).h(1).bg(c.border);
+  let menu = v_flex().w(280).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
+    .child(div().px(8).pt(6).pb(6).text_size(11).text_color(c.dim).truncate().child(`GitHub account for the space ${spaceName}`));
+  if (linked) {
+    // Locked: the linked login, and Unlink as the only way to change it.
+    const l = list.find((x) => x.login === linked);
+    menu = menu.child(row("linked", avatar(linked), linked, l ? (l.ok ? "Locked to this space" : "Locked to this space · login broken") : "Locked to this space · not logged in",
+      svg(`${ICON}lock.svg`).size(12).text_color(c.muted)))
+      .child(row("unlink", icon("close"), `Unlink from ${spaceName}`, "then pick another account", null, (cx) => link(null, cx)));
+  } else {
+    const found = !pin ? (p.account || active) : null;
+    menu = menu.children(list.map((l, i) => row(`l${i}`, avatar(l.login), l.login, about(l), null, (cx) => link(l.login, cx), !space || !l.ok)))
+      .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(11.5).text_color(c.dim).child(p.logins ? "gh is logged in to no account." : "Reading gh auth status…")))
+      .child(row("auto", icon("refresh"), "Automatic", found ? `uses ${found}, the first that can see ${repo ?? "it"}` : "the first account that can see each repository", "✓"))
+      .child(row("add", icon("log-in"), "Log in to another account…", `gh auth login, then it's locked to ${spaceName}`, null,
+        (cx) => { close(cx); addGhAccount(space?.id, { link: Boolean(space), on: p.on, cx, done: (cx) => p.reload(cx) }); }, !space));
+  }
+  if (pin?.pinned === "repo" && repo) menu = menu.child(rule())
+    .child(row("unpin", icon("pin"), `Unpin ${repo}`, `pinned to ${pin.account}, which wins over the space`, null, (cx) => save(setRepoAccount(p.ghRepo, null), cx)));
+  menu = menu.child(rule())
+    .child(row("settings", icon("settings"), "Account settings…", null, null, (cx) => { close(cx); openOverlay({ mod: "toolkit-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); }));
+  return popover.content(menu);
 }
 
 // ---- Creating a pull request -----------------------------------------------------

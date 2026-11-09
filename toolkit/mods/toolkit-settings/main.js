@@ -268,12 +268,15 @@ export default class Settings extends View {
     const gone = Object.keys(links).filter((id) => !spaces().some((s) => s.id === id));
     const logins = list.filter((l) => l.ok).map((l) => l.login);
     return [
-      ...here.map((s) => {
-        const now = spaceAccount(s.id) ?? "";
-        const options = [["", "Automatic"], ...logins.map((l) => [l, l])];
-        if (now && !logins.includes(now)) options.push([now, `${now} (not logged in)`]);
-        return this.choice(t, `github.spaces.${s.id}`, `${s.name}${s.active ? " · this space" : ""}`,
-          now ? null : "The first account that can see each repository", options, false, { now, pick: (v) => save(s.id, v) });
+      ...here.map((s, i) => {
+        const now = spaceAccount(s.id), title = `${s.name}${s.active ? " · this space" : ""}`;
+        // Linked: locked to its login until it is unlinked.
+        if (now) return this.row(t, title, `Locked to ${now}${logins.includes(now) ? "" : " (not logged in)"}`,
+          h_flex().gap(10).items_center()
+            .child(svg(`${ICON}lock.svg`).size(13).text_color(t.dim))
+            .child(this.button(t, `set-gh-unlink-${i}`, "Unlink", () => save(s.id, null))));
+        return this.choice(t, `github.spaces.${s.id}`, title, "The first account that can see each repository",
+          [["", "Automatic"], ...logins.map((l) => [l, l])], false, { now: "", pick: (v) => save(s.id, v) });
       }),
       ...gone.map((id, i) => this.row(t, "A space that's closed", `Linked to ${links[id]}`,
         this.button(t, `set-gh-gone-${i}`, "Unlink", () => save(id, null)))),

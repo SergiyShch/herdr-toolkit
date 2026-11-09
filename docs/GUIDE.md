@@ -100,13 +100,13 @@ A hidden panel does no work: it doesn't run git or `gh` and catches up when you 
 
 **Several GitHub accounts.** If you're logged in to `gh` with more than one account (`gh auth status`), for example a personal one and a work one, the PR and Issues panels pick the right one **for each repository**. They try `gh`'s active account first, then each other login, and remember the first one that can see the repository. The footnote names the account used ("Read from GitHub with gh as …"). 
 
-**An account for each space.** The PR and Issues headers show the account in use (an initial, a login, and a pin when it's linked). Click it for the account menu of the space you're in:
+**An account for each space.** The PR and Issues headers show the account in use: an initial and a login, with a lock when the space is linked (a pin when the repository has its own). Click it for the account menu of the space you're in:
 
-- **A login**: link the space to it. Every repository the PR and Issues panels read in this space then uses that account (`github.spaces` in `toolkit.json`, keyed by the space's id).
-- **Unlink from …**: back to automatic. When nothing is linked the row reads **Automatic** and says which account it found.
+- **A login**: link the space to it and lock it there. Every repository the PR and Issues panels read in this space then uses that account (`github.spaces` in `toolkit.json`, keyed by the space's id).
+- Once linked, the menu shows only that login, with a lock, and **Unlink from …**. Unlink to pick another one; until then nothing else is offered. When nothing is linked a row reads **Automatic** and says which account it found.
 - **Log in to another account…** runs `gh auth login` in a new tab and waits (up to 10 minutes) for the login to show up in `gh auth status`. It then links the space to it on its own and tells you so. A login you had before counts too: `gh` makes it active, and that's what gets linked. `gh` makes the new account its active one, as `gh auth login` always does.
 - **Unpin owner/name** shows when the repository has its own pin, which wins over the space.
-- **Account settings…** opens settings → GitHub. It lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too), every space on this computer with its account (and links to spaces that are gone, to unlink), and the pinned repositories.
+- **Account settings…** opens settings → GitHub. It lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too), every space on this computer (an unlinked one gets a choice of logins; a linked one shows its lock and **Unlink**), links to spaces that are gone, to unlink, and the pinned repositories.
 
 Which account reads a repository, in order: its pin (`github.repos`, settings → GitHub → Pinned), the space's account, the owner's pin (`github.accounts`, `{"my-org": "login"}`, only in `toolkit.json`), then automatic. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change, and neither do your terminals: this is for the panels (and Create PR) only.
 
@@ -356,7 +356,7 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Actions on the open list | on | ↗, Review, Describe |
 | | Issues: show up to | 100 | 25–500 |
 | **GitHub** | Logged in to gh | — | every login; **Make active** (`gh auth switch`), **Add…** (`gh auth login`) |
-| | Account for each space | Automatic | every space on this computer: Automatic or a login; the panels' account menu sets it |
+| | Account for each space | Automatic | every space on this computer: Automatic or a login, then locked until **Unlink**; the panels' account menu sets it |
 | | Find it automatically | on | first account that can see the repository |
 | | Pinned | none | `owner/name=login, …`; wins over the space's account |
 | **Agent tasks** | Start tasks with | Claude Code | any installed agent, or the first installed |
