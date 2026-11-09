@@ -43,7 +43,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
   - **Git**: the repository's worktrees, its branches (the checked-out one marked, ↑↓ against upstream) and the commit graph with branch labels. Click a commit to see its files and open any of them side by side.
   - **Changes**: click a file to compare it side by side (HEAD | working tree), as in an IDE.
   - **Changes** in a folder of repositories (not one itself) shows each repository in its own section, with a filter chip per repository, and commits to the one you pick. **Create PR** beside Commit pushes the branch and opens a draft pull request from its commits.
-  - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. The account menu in the panel header switches it per repository or adds one.
+  - **Several `gh` accounts?** Link each space to one from the account menu in the panel header, or log in to a new one there and it links itself. Unlinked spaces use the account that can see the repository, found automatically.
 - **Tabs that name themselves.** An unnamed tab shows the Jira key its branch carries (`DS-1234`) or its agent's own title. A name you type always wins.
 - **Jira everywhere.** Set your site and every key like `DS-1234` links to its ticket: on tabs (`⌘⌥J`), pull request titles, branches, descriptions and comments, issues, and Markdown previews.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.

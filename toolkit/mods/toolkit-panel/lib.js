@@ -4,12 +4,14 @@
 // `panel-body` stack in layouts/toolkit.json; toolkit-tabs picks one with
 // layout.select and shows or hides the `panel` column. A hidden panel stays
 // alive, so each one checks `isShown(id)` before it reads git or GitHub.
+// Modified for herdr-toolkit: gh runs as a per-repository or per-space account
+// (ghAccount, accountPicker), and Create PR pushes as that account.
 import { div, svg } from "gpui-kit";
 import { EditorState, TextView, Button, Popover, v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared, openOverlay } from "herdr";
 import { cfg, setSetting, jiraKeys, jiraUrl, linkJira } from "./config.js";
-import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS } from "./gh.js";
-export { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
+import { ghLogins, switchGhAccount, addGhAccount, ACCOUNTS, spaceAccount, linkSpace } from "./gh.js";
+export { ghLogins, switchGhAccount, addGhAccount, spaceAccount, linkSpace } from "./gh.js";
 export { cfg, prompt, jiraKey, jiraKeys, jiraUrl, linkJira } from "./config.js";
 
 export const ICON = "mods/toolkit-panel/icons/";
@@ -99,21 +101,28 @@ export async function githubRepo(root, on) {
   return m ? { owner: m[1], name: m[2] } : null;
 }
 
-// The account pinned for a repository: by owner/name first, then by owner.
-function pinFor(repo) {
+// What decides the account for a repository, in order: its own pin
+// (github.repos), the link of the space it is read in (github.spaces), its
+// owner's pin (github.accounts). { account, pinned: "repo"|"space"|"owner" } or null.
+export function pinFor(repo, space) {
   const gh = cfg().github ?? {}, low = (s) => String(s).toLowerCase();
   const find = (map, k) => Object.entries(map ?? {}).find(([x]) => low(x) === low(k))?.[1];
-  return find(gh.repos, `${repo.owner}/${repo.name}`) ?? find(gh.accounts, repo.owner) ?? null;
+  const byRepo = repo && find(gh.repos, `${repo.owner}/${repo.name}`);
+  if (byRepo) return { account: byRepo, pinned: "repo" };
+  const bySpace = spaceAccount(space);
+  if (bySpace) return { account: bySpace, pinned: "space" };
+  const byOwner = repo && find(gh.accounts, repo.owner);
+  return byOwner ? { account: byOwner, pinned: "owner" } : null;
 }
 
-// Which gh account reads this repository: pinned in settings (github.repos, then
-// github.accounts by owner), else the one found earlier, else the first
-// logged-in account that can see it (gh's active one first). Remembered in shared state.
-export async function ghAccount(root, on) {
+// Which gh account reads this repository: pinned (see pinFor; `space` defaults to
+// the shown one), else the one found earlier, else the first logged-in account
+// that can see it (gh's active one first). Remembered in shared state.
+export async function ghAccount(root, on, space = location().space) {
   const repo = await githubRepo(root, on);
   if (!repo) return { repo: null, account: "" };
-  const pin = pinFor(repo);
-  if (pin) return { repo, account: pin, pinned: true };
+  const pin = pinFor(repo, space);
+  if (pin) return { repo, ...pin };
   if (cfg().github?.autoAccount === false) return { repo, account: "" };
   const k = `${on ?? ""}|${repo.owner}/${repo.name}`.toLowerCase();
   const known = shared(ACCOUNTS) ?? {};
@@ -143,22 +152,30 @@ export function setRepoAccount(repo, login) {
   return setSetting("github.repos", repos);
 }
 
-// The account menu in the PR and Issues panels' headers: which gh login reads
-// this repository. Picking one pins the repository to it; Automatic removes the
-// pin. Making a login gh's active one lives in settings → GitHub. `p` is the
-// panel: it has account, ghRepo, pinned, on, logins and reload(cx).
+// The account menu in the PR and Issues panels' headers: which gh login the
+// shown space reads GitHub as. Picking one links the space to it (github.spaces);
+// "Unlink" goes back to automatic. "Log in to another account…" runs gh auth
+// login and links whatever login it adds. A repository pin (github.repos) still
+// wins; the menu says so and can remove it. Making a login gh's active one lives
+// in settings → GitHub. `p` is the panel: it has account, ghRepo, pinned, on,
+// logins and reload(cx).
 export function accountPicker(p, c, prefix) {
   const id = `${prefix}-gh`, list = p.logins ?? [];
+  const space = spaces().find((s) => s.active) ?? null;
+  const linked = spaceAccount(space?.id);
   const active = list.find((l) => l.active)?.login;
   const who = p.account || active || "gh";
+  const why = p.pinned === "repo" ? "pinned for this repository" : p.pinned === "space" ? `linked to ${space?.name ?? "this space"}`
+    : p.pinned === "owner" ? "pinned for its owner" : "found automatically";
   const avatar = (login, size = 18) => div().size(size).flex_none().flex().items_center().justify_center().rounded_full()
     .bg(c.subtle).border_1().border_color(c.border).text_size(size * 0.5).text_color(c.muted).child((login[0] ?? "?").toUpperCase());
   const trigger = Button.new(`${id}-trigger`).h(26).pl(4).pr(6).gap(6).flex_none().items_center().rounded(13).cursor_pointer()
     .border_1().border_color(p.accountOpen ? c.border : "#00000000")
-    .accessibility_label(`GitHub account: ${who}`).tooltip(`Reading GitHub as ${who}${p.pinned ? " (pinned)" : ""}`)
+    .accessibility_label(`GitHub account: ${who}`).tooltip(`Reading GitHub as ${who} (${why})`)
     .hover((s) => s.bg(c.subtle))
     .child(avatar(who))
     .child(div().max_w(110).truncate().text_size(12).text_color(c.text).child(who))
+    .when(p.pinned === "space" || p.pinned === "repo", (el) => el.child(svg(`${ICON}pin.svg`).size(10).text_color(c.dim)))
     .child(svg(`${ICON}chevron-down.svg`).size(11).text_color(c.dim));
   const popover = Popover.new(id).trigger(trigger).anchor("top_right").open(Boolean(p.accountOpen))
     .on_open_change((open, cx) => {
@@ -168,12 +185,12 @@ export function accountPicker(p, c, prefix) {
   if (!p.accountOpen) return popover;
   const repo = p.ghRepo ? `${p.ghRepo.owner}/${p.ghRepo.name}` : null;
   const close = (cx) => { p.accountOpen = false; cx.notify(); };
-  const pick = (login, cx) => {
+  const save = (work, cx) => {
     close(cx);
-    setRepoAccount(p.ghRepo, login).then(() => { if (!login && p.root) forgetGhAccount(p.root, p.on, p.ghRepo); })
-      .catch((e) => notify({ title: "Could not save the account", body: String(e?.message ?? e), level: "error" }))
+    work.catch((e) => notify({ title: "Could not save the account", body: String(e?.message ?? e), level: "error" }))
       .finally(() => cx.spawn(async (cx) => p.reload(cx)));
   };
+  const link = (login, cx) => save(linkSpace(space?.id, login), cx);
   // One choice: a check column, then what it is and a quiet second line.
   const choice = (key, lead, title, sub, checked, onClick, disabled = false) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6)
     .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle))).when(disabled, (el) => el.opacity(0.5))
@@ -183,28 +200,36 @@ export function accountPicker(p, c, prefix) {
       .child(div().truncate().text_size(12.5).text_color(c.text).child(title))
       .when(Boolean(sub), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(sub))))
     .child(div().w(14).flex_none().text_size(12).text_color(c.text).child(checked ? "✓" : ""));
-  const action = (key, icon, title, onClick) => Button.new(`${id}-${key}`).w_full().px(8).py(6).gap(10).items_center().rounded(6).cursor_pointer()
-    .hover((s) => s.bg(c.subtle)).accessibility_label(title).on_click((_e, cx) => onClick(cx))
-    .child(div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}${icon}.svg`).size(13).text_color(c.muted)))
-    .child(div().flex_1().text_size(12.5).text_color(c.text).child(title));
+  const icon = (name) => div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}${name}.svg`).size(13).text_color(c.muted));
+  const action = (key, name, title, sub, onClick) => choice(key, icon(name), title, sub, false, onClick);
   const found = !p.pinned ? (p.account || active) : null;
-  return popover.content(v_flex().w(260).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
-    .child(div().px(8).pt(6).pb(6).text_size(11).text_color(c.dim).truncate().child(repo ? `GitHub account for ${repo}` : "GitHub account"))
-    .child(choice("auto", div().size(18).flex_none().flex().items_center().justify_center().child(svg(`${ICON}refresh.svg`).size(13).text_color(c.muted)),
-      "Automatic", found ? `uses ${found}, the first that can see it` : "the first account that can see it", !p.pinned, (cx) => pick(null, cx), !repo))
+  const spaceName = space?.name ?? "this space";
+  return popover.content(v_flex().w(280).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
+    .child(div().px(8).pt(6).pb(6).text_size(11).text_color(c.dim).truncate().child(`GitHub account for the space ${spaceName}`))
     .children(list.map((l, i) => choice(`l${i}`, avatar(l.login), l.login,
       [l.active ? "gh's active account" : null, l.host !== "github.com" ? l.host : null, l.ok ? null : "login broken"].filter(Boolean).join(" · ") || null,
-      Boolean(p.pinned) && p.account === l.login, (cx) => pick(l.login, cx), !repo || !l.ok)))
+      linked === l.login, (cx) => link(l.login, cx), !space || !l.ok)))
     .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(11.5).text_color(c.dim).child(p.logins ? "gh is logged in to no account." : "Reading gh auth status…")))
+    .child(linked
+      ? action("unlink", "close", `Unlink from ${spaceName}`, "back to the first account that can see each repository", (cx) => link(null, cx))
+      : choice("auto", icon("refresh"), "Automatic", found ? `uses ${found}, the first that can see ${repo ?? "it"}` : "the first account that can see each repository", true, () => {}))
+    .child(action("add", "log-in", "Log in to another account…", `gh auth login, then it's linked to ${spaceName}`,
+      (cx) => { close(cx); addGhAccount(space?.id, { link: Boolean(space), on: p.on, cx, done: (cx) => p.reload(cx) }); }))
+    .when(p.pinned === "repo" && Boolean(repo), (el) => el
+      .child(div().mx(8).my(4).h(1).bg(c.border))
+      .child(action("unpin", "pin", `Unpin ${repo}`, `pinned to ${p.account}, which wins over the space`, (cx) => save(setRepoAccount(p.ghRepo, null), cx))))
     .child(div().mx(8).my(4).h(1).bg(c.border))
-    .child(action("add", "plus", "Add an account…", (cx) => { close(cx); addGhAccount(spaces().find((s) => s.active)?.id); }))
-    .child(action("settings", "settings", "Account settings…", (cx) => { close(cx); openOverlay({ mod: "toolkit-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); })));
+    .child(action("settings", "settings", "Account settings…", null, (cx) => { close(cx); openOverlay({ mod: "toolkit-settings", kind: "dialog", width: 820, height: 620, props: { section: "github" } }); })));
 }
 
 // ---- Creating a pull request -----------------------------------------------------
 
 // git that fails instead of waiting for a password prompt nobody can see.
 const GIT_NO_PROMPT = 'GIT_TERMINAL_PROMPT=0 exec git "$@"';
+// The same, as one gh account: git asks only gh's credential helper, which hands
+// it GH_TOKEN (not the keychain's login). For an https remote; ssh keys decide ssh.
+const GIT_AS = 'u=$1; shift; t=$(gh auth token -u "$u" 2>/dev/null) || { echo "gh has no login for $u (gh auth login)" >&2; exit 97; }; '
+  + 'GH_TOKEN=$t GIT_TERMINAL_PROMPT=0 exec git -c credential.helper= -c "credential.helper=!gh auth git-credential" "$@"';
 const PR_EXISTS = /already exists[^\n]*\n?\s*(https:\/\/\S+)/i;
 
 // The remote's default branch (origin/HEAD), else main or master if origin has one.
@@ -219,8 +244,9 @@ export async function defaultBranch(root, on) {
 }
 
 // Pushes the current branch (setting its upstream the first time) and opens a
-// pull request for it with `gh pr create --fill`, as the gh account that can
-// see the repository. Draft unless pr.createDraft is off. Resolves to
+// pull request for it with `gh pr create --fill`, both as the gh account that
+// reads the repository (ghAccount; an https push uses its token, not the
+// keychain's). Draft unless pr.createDraft is off. Resolves to
 // { url, existed }; throws an Error whose message says what to do.
 export async function createPr(root, on) {
   const git = (args) => exec("git", args, { cwd: root, on });
@@ -231,7 +257,9 @@ export async function createPr(root, on) {
   const { repo, account } = await ghAccount(root, on);
   if (!repo) throw new Error("origin is not a GitHub repository");
   const up = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-  const push = await exec("sh", ["-c", GIT_NO_PROMPT, "sh", "push", ...(up.code === 0 ? [] : ["-u", "origin", "HEAD"])], { cwd: root, on });
+  const pushUrl = (await git(["remote", "get-url", "--push", "origin"])).stdout.trim();
+  const how = account && /^https:\/\//i.test(pushUrl) ? [GIT_AS, "sh", account] : [GIT_NO_PROMPT, "sh"];
+  const push = await exec("sh", ["-c", ...how, "push", ...(up.code === 0 ? [] : ["-u", "origin", "HEAD"])], { cwd: root, on });
   if (push.code !== 0) throw new Error(`push failed: ${(push.stderr || push.stdout).trim().split("\n").filter(Boolean).pop() ?? ""}`);
   const r = await ghAs(account, ["pr", "create", "--fill", ...(cfg().pr.createDraft === false ? [] : ["--draft"]), "--head", branch], { cwd: root, on });
   const out = `${r.stdout}\n${r.stderr}`;

@@ -10,9 +10,9 @@
 // every ~3 s). Task prompts live only in the file (`prompts`).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, Input, InputState } from "gpui-base";
-import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run } from "herdr";
+import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run, spaces } from "herdr";
 import { cfg, get, setSetting, resetSettings, DEFAULTS, SETTINGS_FILE } from "./config.js";
-import { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
+import { ghLogins, switchGhAccount, addGhAccount, spaceAccount } from "./gh.js";
 
 const ICON = "mods/toolkit-panel/icons/";
 const SECTIONS = [
@@ -30,7 +30,7 @@ const LISTS = {
   "gcloud.loginArgs": { split: (v) => v.trim().split(/\s+/).filter(Boolean), join: (a) => a.join(" "), placeholder: "auth login" },
   "jira.projects": { split: (v) => v.split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean), join: (a) => (a ?? []).join(", "), placeholder: "DS, WEB (empty: any)" },
   "jira.baseUrl": { split: (v) => v.trim(), join: (v) => v ?? "", placeholder: "https://your-site.atlassian.net", empty: "" },
-  // owner/name=login pairs; the panels' account menu writes these too.
+  // owner/name=login pairs; the panels' account menu can remove the shown one.
   "github.repos": {
     split: (v) => Object.fromEntries(v.split(/[,\n]/).map((s) => s.split("=").map((x) => x.trim())).filter(([o, l]) => o.includes("/") && l)),
     join: (o) => Object.entries(o ?? {}).map(([k, v]) => `${k}=${v}`).join(", "),
@@ -130,9 +130,10 @@ export default class Settings extends View {
     return this.row(t, title, about, control, disabled);
   }
 
-  // A segmented choice, in the look of Herdr's appearance picker.
-  choice(t, path, title, about, options, disabled = false) {
-    const now = get(path);
+  // A segmented choice, in the look of Herdr's appearance picker. `own` reads and
+  // saves the value some other way than by path: { now, pick(value) }.
+  choice(t, path, title, about, options, disabled = false, own = null) {
+    const now = own ? own.now : get(path);
     const control = h_flex().rounded(7).border_1().border_color(t.border).bg(t.raised).overflow_hidden()
       .children(options.map(([value, label], i) => {
         const on = JSON.stringify(now) === JSON.stringify(value);
@@ -140,7 +141,7 @@ export default class Settings extends View {
           .when(i > 0, (el) => el.border_l(1).border_color(t.border))
           .bg(on ? t.selected : "#00000000").text_color(on ? t.foreground : t.muted)
           .hover((s) => s.bg(t.hover).text_color(t.foreground))
-          .on_click(() => { if (!disabled && !on) this.set(path, value); }).child(label);
+          .on_click(() => { if (!disabled && !on) { if (own) own.pick(value); else this.set(path, value); } }).child(label);
       }));
     return this.row(t, title, about, control, disabled);
   }
@@ -245,9 +246,38 @@ export default class Settings extends View {
           }))))
       .child(this.row(t, "Add an account", "gh auth login, in a new tab", this.button(t, "set-gh-add", "Add…", () => { this.close(); addGhAccount(); })))
       .child(div().h(18))
+      .child(this.heading(t, "Account for each space"))
+      .child(div().pb(6).text_size(12.5).line_height("18px").text_color(t.dim)
+        .child("The PR and Issues panels read GitHub as the space's account. The account menu in their header links the space you're in."))
+      .children(this.spaceRows(t, list))
+      .child(div().h(18))
       .child(this.heading(t, "Which account reads a repository"))
       .child(this.toggle(t, "github.autoAccount", "Find it automatically", "The PR and Issues panels use the first account that can see the repository, active one first"))
-      .child(this.text(t, "github.repos", "Pinned", "owner/name=login pairs. The account menu in the PR and Issues panels sets these."));
+      .child(this.text(t, "github.repos", "Pinned", "owner/name=login pairs. A repository's pin wins over its space's account."));
+  }
+
+  // One row per space on this computer, plus links to spaces that are gone.
+  spaceRows(t, list) {
+    const links = get("github.spaces") ?? {};
+    const save = (id, login) => {
+      const next = { ...(get("github.spaces") ?? {}) };
+      if (login) next[id] = login; else delete next[id];
+      this.set("github.spaces", next);
+    };
+    const here = spaces().filter((s) => !s.machine);
+    const gone = Object.keys(links).filter((id) => !spaces().some((s) => s.id === id));
+    const logins = list.filter((l) => l.ok).map((l) => l.login);
+    return [
+      ...here.map((s) => {
+        const now = spaceAccount(s.id) ?? "";
+        const options = [["", "Automatic"], ...logins.map((l) => [l, l])];
+        if (now && !logins.includes(now)) options.push([now, `${now} (not logged in)`]);
+        return this.choice(t, `github.spaces.${s.id}`, `${s.name}${s.active ? " · this space" : ""}`,
+          now ? null : "The first account that can see each repository", options, false, { now, pick: (v) => save(s.id, v) });
+      }),
+      ...gone.map((id, i) => this.row(t, "A space that's closed", `Linked to ${links[id]}`,
+        this.button(t, `set-gh-gone-${i}`, "Unlink", () => save(id, null)))),
+    ];
   }
 
   agentPage(t, c) {

@@ -100,14 +100,15 @@ A hidden panel does no work: it doesn't run git or `gh` and catches up when you 
 
 **Several GitHub accounts.** If you're logged in to `gh` with more than one account (`gh auth status`), for example a personal one and a work one, the PR and Issues panels pick the right one **for each repository**. They try `gh`'s active account first, then each other login, and remember the first one that can see the repository. The footnote names the account used ("Read from GitHub with gh as …"). 
 
-**Switching accounts.** The PR and Issues headers show the account in use (an initial and a login). Click it for the account menu:
+**An account for each space.** The PR and Issues headers show the account in use (an initial, a login, and a pin when it's linked). Click it for the account menu of the space you're in:
 
-- **Automatic**: the first account that can see the repository (it says which).
-- **A login**: read this repository with it. That pins the repository (`github.repos` in `toolkit.json`).
-- **Add an account…** runs `gh auth login` in a new tab. `gh` makes the new account active.
-- **Account settings…** opens settings → GitHub, which lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too) and the pinned repositories.
+- **A login**: link the space to it. Every repository the PR and Issues panels read in this space then uses that account (`github.spaces` in `toolkit.json`, keyed by the space's id).
+- **Unlink from …**: back to automatic. When nothing is linked the row reads **Automatic** and says which account it found.
+- **Log in to another account…** runs `gh auth login` in a new tab and waits (up to 10 minutes) for the login to show up in `gh auth status`. It then links the space to it on its own and tells you so. A login you had before counts too: `gh` makes it active, and that's what gets linked. `gh` makes the new account its active one, as `gh auth login` always does.
+- **Unpin owner/name** shows when the repository has its own pin, which wins over the space.
+- **Account settings…** opens settings → GitHub. It lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too), every space on this computer with its account (and links to spaces that are gone, to unlink), and the pinned repositories.
 
-A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-org": "login"}`) still work from `toolkit.json`. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change.
+Which account reads a repository, in order: its pin (`github.repos`, settings → GitHub → Pinned), the space's account, the owner's pin (`github.accounts`, `{"my-org": "login"}`, only in `toolkit.json`), then automatic. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change, and neither do your terminals: this is for the panels (and Create PR) only.
 
 ### Files
 
@@ -123,7 +124,7 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 - A new (untracked) file counts its lines as additions.
 - **Click a file** to compare it side by side in a large dialog, as an IDE does: the last commit (HEAD) on the left, the working tree on the right, scrolling together. Changed lines are blue, with the part that differs marked; removed lines red, added lines green. Unchanged runs fold away (click a fold to show it); the **Changes only / Whole file** button switches modes and is remembered. **F7** / **Shift+F7** (or ↓ / ↑) jump between changes, and past a file's last change on to the next file of the Changes list (before its first, to the previous one), so you can read through every change without closing the dialog. It reads the file again on every save. Esc closes it.
 - **Commit** commits only the files listed, never `git add -A` on the whole tree. You can turn committing off in settings.
-- **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account that can see the repository. Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
+- **Create PR** sits beside **Commit** when the branch isn't the base (origin's default branch) and has commits the base doesn't. It pushes the branch (`-u origin HEAD` the first time) and runs `gh pr create --fill`, as a draft by default, with the gh account the panels use for the repository (an `https` push uses that account's token, not the keychain's). Its title and body come from the commits. When the branch already has one, it says so and links it. In a single repository it then switches to the PR panel.
 - **A folder of repositories.** When the pane's folder isn't a repository but holds several (`~/work/client/api`, `~/work/client/web`…), the panel finds them (up to 100), up to 2 folders deep (hidden folders, `node_modules`, `vendor`, `dist`, `build` and `target` are skipped), and shows one section per repository with its branch and `+added −removed`. Click a section's header to fold it.
   - The chips under the title filter the list: **All**, or one repository. Repositories without changes are left out of **All**.
   - **Commit** and **Create PR** go to one repository: the one picked in the chips, else the one of the file you last opened. The line above the message says which. A repository with no changes but commits ahead of its base (`↑2`) still shows, ready for its pull request.
@@ -355,8 +356,9 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Actions on the open list | on | ↗, Review, Describe |
 | | Issues: show up to | 100 | 25–500 |
 | **GitHub** | Logged in to gh | — | every login; **Make active** (`gh auth switch`), **Add…** (`gh auth login`) |
+| | Account for each space | Automatic | every space on this computer: Automatic or a login; the panels' account menu sets it |
 | | Find it automatically | on | first account that can see the repository |
-| | Pinned | none | `owner/name=login, …`; the panels' account menu sets these |
+| | Pinned | none | `owner/name=login, …`; wins over the space's account |
 | **Agent tasks** | Start tasks with | Claude Code | any installed agent, or the first installed |
 | | Tasks | all on | Code review · Describe change · Explain · Address feedback · Resolve conflicts · Start on issue |
 | | Prompts | built-in | file only, see below |

@@ -44,7 +44,9 @@ export const DEFAULTS = {
   github: {
     autoAccount: true,       // find the logged-in gh account that can see each repository
     accounts: {},            // pin by owner: { "my-org": "my-login" }
-    repos: {},               // pin by repository: { "my-org/app": "my-login" }; wins over an owner pin
+    repos: {},               // pin by repository: { "my-org/app": "my-login" }; wins over everything
+    spaces: {},              // link a space: { "<space id>": "my-login" }; the panels' account menu sets it.
+                             // Order: repository pin, then the space's link, then an owner pin, then automatic
   },
   agent: {
     prefer: "claude",        // programs.json key of the agent tasks start with; "" = first installed

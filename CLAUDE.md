@@ -73,6 +73,13 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - A click on a commit: `git show --format= --no-renames --diff-merges=first-parent` with `--name-status -z` and `--numstat -z` (`parseCommitFiles`), listed under the graph. A file opens `diff.js` with `rev`: it diffs with `git show -U1000000 <rev> -- path` (works for root commits; merges against the first parent) and doesn't watch.
 - The Node stub for `herdr` also needs `appHome` and `writeTextFile` (config.js imports them).
 
+## GitHub accounts (`gh.js`, `lib.js`)
+
+- `ghAccount(root, on, space = location().space)` → `{ repo, account, pinned }`. `pinFor` order: `github.repos` (`pinned: "repo"`), `github.spaces[<space id>]` (`"space"`), `github.accounts` by owner (`"owner"`), else the automatic probe (cached in shared `toolkit.gh.accounts`).
+- The PR/Issues account menu (`accountPicker`) links the **active space** (`linkSpace`); repository pins are set in settings only (the menu can unpin the shown one).
+- "Log in to another account…": `addGhAccount(space, { link, on, cx, done })` snapshots `gh auth status`, opens the `gh auth login` tab, then polls every 3 s (`cx.sleep`; mods have no `setTimeout`) for up to 10 min. It links the first new login, else one that became active.
+- Create PR pushes an `https` origin as the account: `GIT_AS` sets `GH_TOKEN` and swaps in `!gh auth git-credential` as the only credential helper (gh's helper honours `GH_TOKEN`). Terminals are untouched: the SDK can't set env per space.
+
 ## Tab bar wrapping (`toolkit-tabs`)
 
 - With `tabs.wrap` (on) the tabs sit in a `flex_wrap` row; its `on_size_change` height is the bar's height, applied with `layout.resize { id: "tabs", px }` (never under 42, the layout's one-row size). The root is `items_start` so that row measures its content, not the block.
