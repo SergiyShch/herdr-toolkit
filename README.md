@@ -1,7 +1,7 @@
-# herdr-serhii
+# herdr-toolkit
 
-A personal fork of [herdr-sab](https://github.com/thabti/herdr-sab). Upstream is the `upstream` git remote;
-it installs as the `serhii` layout with `serhii-*` mods, so it can sit next to herdr-sab.
+Built on [herdr-sab](https://github.com/thabti/herdr-sab). It installs as the `toolkit` layout with
+`toolkit-*` mods, so it can sit next to herdr-sab or any other layout.
 
 A slim layout for the [Herdr](https://herdr.dev) desktop app. It keeps Herdr's own
 window (spaces and agents on the left, tabs, panes as cards, status bar) and adds
@@ -20,18 +20,18 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 2. Clone and install:
 
    ```sh
-   git clone <your-fork-url> herdr-serhii
-   cd herdr-serhii
+   git clone https://github.com/SergiyShch/herdr-toolkit.git
+   cd herdr-toolkit
    scripts/install.sh
    ```
 
 3. Switch to the layout:
 
    ```sh
-   herdr-app do layout.switch --name serhii
+   herdr-app do layout.switch --name toolkit
    ```
 
-4. Open **herdr-serhii settings** (`⌘⌥,`) to turn features on or off.
+4. Open **herdr-toolkit settings** (`⌘⌥,`) to turn features on or off.
 
 `ctrl-shift-l` takes you back to your previous layout. More options are under [Install](#install).
 
@@ -49,7 +49,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
 - **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.
 - **Your editor, one key away.** A Finder button opens the focused pane's folder in Finder. `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
-- **Settings for all of it.** **herdr-serhii settings** opens from the ⚙ in the tab bar (or `⌘⌥,`). Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/serhii.json`.
+- **Settings for all of it.** **herdr-toolkit settings** opens from the ⚙ in the tab bar (or `⌘⌥,`). Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/toolkit.json`.
 
 ## Install
 
@@ -63,14 +63,14 @@ each mod. It never overwrites files it didn't install, and it leaves keys you al
 - **Update:** `git pull && scripts/install.sh`. Herdr reloads the mods live.
 - **Switch back:** `ctrl-shift-l` returns to your previous layout.
 - **Remove:** `scripts/install.sh --remove` deletes everything the installer added. Your settings
-  in `~/.config/herdr-app/serhii.json` stay.
+  in `~/.config/herdr-app/toolkit.json` stay.
 
 ## Keys
 
 | Keys | What they do |
 |---|---|
 | `⌘⇧O` | Open the focused pane's folder in an editor |
-| `⌘⌥,` | herdr-serhii settings |
+| `⌘⌥,` | herdr-toolkit settings |
 | `⌘⌥G` | `gcloud auth login` in a new tab |
 | `⌘⌥J` | Open the tab's Jira ticket |
 | Double-click a tab, or `F2` | Name it (empty: back to the automatic name) |

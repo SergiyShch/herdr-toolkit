@@ -1,0 +1,8 @@
+{
+  "layout:toolkit": {
+    "cmd-shift-o": "mod.open:toolkit-open-with",
+    "cmd-alt-g": "toolkit-tabs.gcloud-login",
+    "cmd-alt-,": "mod.open:toolkit-settings",
+    "cmd-alt-j": "toolkit-tabs.jira-open"
+  }
+}

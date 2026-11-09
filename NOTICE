@@ -1,15 +1,16 @@
-herdr-serhii, a personal fork of herdr-sab (https://github.com/thabti/herdr-sab),
+herdr-toolkit (https://github.com/SergiyShch/herdr-toolkit), derived from herdr-sab
+(https://github.com/thabti/herdr-sab, Apache License 2.0),
 a layout for the Herdr app
 
 Parts of this package are derived from Kanso (https://github.com/jlopezlira/herdr-kanso),
 Copyright 2026 jlopezlira, Apache License 2.0, which is itself derived from mods
 shipped with Herdr (https://github.com/herdrdev/herdr-app, Apache License 2.0):
 
-- serhii/mods/serhii-panel/{files,changes,pr,preview,lib}.js  (from kanso-panel)
-- serhii/mods/serhii-open-with/main.js                         (from open-with)
-- serhii/mods/serhii-panel/icons/*  (Kanso's Lucide-style set; issue/external/github/agent
+- toolkit/mods/toolkit-panel/{files,changes,pr,preview,lib}.js  (from kanso-panel)
+- toolkit/mods/toolkit-open-with/main.js                         (from open-with)
+- toolkit/mods/toolkit-panel/icons/*  (Kanso's Lucide-style set; issue/external/github/agent
   from herdr-mission-control, MIT)
-- serhii/mods/serhii-tabs/main.js   (from Herdr's shipped `tabs` mod)
+- toolkit/mods/toolkit-tabs/main.js   (from Herdr's shipped `tabs` mod)
 
 Each derived file's header says what changed. Kanso's original NOTICE is kept in NOTICE.kanso.
 Ideas (self-naming tabs, Claude context readings) come from
