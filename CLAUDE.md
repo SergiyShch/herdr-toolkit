@@ -82,6 +82,13 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - "Log in to another account…": `addGhAccount(space, { link, on, cx, done })` snapshots `gh auth status`, opens the `gh auth login` tab, then polls every 3 s (`cx.sleep`; mods have no `setTimeout`) for up to 10 min. It links the first new login, else one that became active.
 - Create PR pushes an `https` origin as the account: `GIT_AS` sets `GH_TOKEN` and swaps in `!gh auth git-credential` as the only credential helper (gh's helper honours `GH_TOKEN`). Terminals are untouched: the SDK can't set env per space.
 
+## gcloud per space (`gcloud.js`, `gcloud-menu.js`, `shell/space-env.zsh`)
+
+- `gcloud.spaces`: space id → configuration name. `toolkit-tabs` reads the shown space's configuration with `--configuration=<name>` on every gcloud call; `gcloudKey()` (space + its configuration) is compared in `render`, so a switch of space or a link rereads.
+- The chip's click opens `gcloud-menu.js` as a `toolkit-panel` popup (`props: { panel: "gcloud" }`) under the chip, not a `Popover`: the 42 px tab bar would clip one. The menu links/unlinks itself (settings) and sends the rest to the tab bar: `run("toolkit-tabs.gcloud-login" | "gcloud-new" | "gcloud-refresh")`.
+- "New configuration…": `newGcloudConfig` runs an `sh` script in a new tab (name, `configurations create --no-activate`, `auth login --configuration`, project); `toolkit-tabs.gcloudNew` polls `gcloudConfigs()` (3 s, 10 min) and links the first new one with an account. The tab bar does the waiting because the popup closes.
+- Terminals: `toolkit/shell/space-env.zsh` → `~/.config/herdr-app/toolkit-space-env.zsh` (install.sh copies it, prints the `~/.zshrc` line when missing; never edits `~/.zshrc`). `hc get --json $HC_TERMINAL_ID` has the `herdr.space` label already at shell start; `jq` reads `toolkit.json`. Only new shells see a change.
+
 ## Tab bar wrapping (`toolkit-tabs`)
 
 - With `tabs.wrap` (on) the tabs sit in a `flex_wrap` row; its `on_size_change` height is the bar's height, applied with `layout.resize { id: "tabs", px }` (never under 42, the layout's one-row size). The root is `items_start` so that row measures its content, not the block.

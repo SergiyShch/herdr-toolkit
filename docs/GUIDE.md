@@ -82,7 +82,7 @@ Tab bar, left to right:
 |---|---|
 | Tabs | Self-naming ([§4](#4-tabs-that-name-themselves)). A Claude tab shows its context %. Click selects, drag reorders, double-click names, right-click opens Herdr's tab menu. Tabs that don't fit wrap onto a new row and the bar grows (settings → Tabs; off, they scroll and the mouse wheel moves between tabs). |
 | `+` | Herdr's new-tab menu: a shell or any installed agent |
-| ☁ ● project | gcloud chip: click to check again ([§6](#6-gcloud-login)) |
+| ☁ ● project | gcloud chip: click for the space's gcloud configuration ([§6](#6-gcloud-login)) |
 | ↪ | `gcloud auth login` |
 | ⧉ | Open in editor ([§7](#7-open-in-editor)) |
 | Files · Changes · Git · PR · Issues | Toggle the side panel ([§3](#3-the-side-panel)) |
@@ -265,15 +265,28 @@ The chip shows `☁ ● my-project`:
 | red | not logged in, or the login expired (for example, your organisation requires reauthentication) |
 | grey | checking |
 
-The tooltip shows the account, the project, any configured account that differs, and when it last checked. **Click the chip** to check again now.
+The tooltip shows the account, the project, any configured account that differs, and when it last checked. **Click the chip** for its menu (below); **Check again** is there.
 
-**↪** (or `⌘⌥G`) opens a tab named "gcloud login" running `gcloud auth login`. Finish in the browser, and the chip turns green within about 10 s: it checks every 10 s for 3 minutes after a login starts. Close the tab when you're done.
+**↪** (or `⌘⌥G`) opens a tab named "gcloud login" running `gcloud auth login` (with `--configuration <name>` in a linked space). Finish in the browser, and the chip turns green within about 10 s: it checks every 10 s for 3 minutes after a login starts. Close the tab when you're done.
 
 What it runs: `gcloud config list` and `gcloud auth list` every 2 minutes. If **Check the login still works** is on, it also runs `gcloud auth print-access-token` every 10 minutes. That command uses the network, and it is the only check that catches an expired session. If `gcloud` isn't installed, the chip doesn't show.
 
 Settings: the chip can show the project, the account, or just the dot. You can also change the intervals, turn off the token check, and change the login command (for example `auth login --update-adc` to refresh application-default credentials too).
 
-The chip reflects your **active gcloud configuration**, which is global, not per terminal.
+**A gcloud configuration for each space.** A gcloud [configuration](https://cloud.google.com/sdk/docs/configurations) is a named account and project. The chip's menu sets one per space:
+
+- **A configuration**: lock the space to it (`gcloud.spaces` in `toolkit.json`, keyed by the space's id). The chip then reads that configuration (`--configuration`) and shows a lock. Once locked, the menu offers only **Log in again…** and **Unlink from …**.
+- **Automatic** (nothing linked): gcloud's active configuration, which is global, as before.
+- **New configuration…** opens a tab that asks for a name (the space's name by default), runs `gcloud config configurations create <name> --no-activate`, `gcloud auth login --configuration <name>`, then asks for a project. As soon as the new configuration has an account, the space is locked to it and a notification says so. The tab bar waits up to 10 minutes.
+- Settings → gcloud lists every space on this computer with its configuration, and **Unlink**.
+
+**Terminals.** New terminals in a linked space get `CLOUDSDK_ACTIVE_CONFIG_NAME=<name>`, so `gcloud` there, and any agent started there, uses that space's configuration. Other spaces keep theirs, and gcloud's global active configuration doesn't change. It takes one line at the end of `~/.zshrc` (the installer prints it when it's missing):
+
+```zsh
+[[ -r ~/.config/herdr-app/toolkit-space-env.zsh ]] && source ~/.config/herdr-app/toolkit-space-env.zsh
+```
+
+The snippet (`toolkit/shell/space-env.zsh`, installed to the app home) asks `hc` which space the terminal is in (`HC_TERMINAL_ID`, the `herdr.space` label) and reads `toolkit.json` with `jq`. It runs once, when the shell starts (about 10 ms), so a link reaches **new** terminals: restart a terminal (and the agent in it) to pick it up. Outside Herdr, or without `jq`, it does nothing. Application-default credentials (`--update-adc`) are global in gcloud and stay so.
 
 ---
 
@@ -371,6 +384,7 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Chip shows | Project | Project · Account · Dot only |
 | | Catch an expired login | on | network: `print-access-token` |
 | | Login command | `auth login` | args after `gcloud` |
+| | Configuration for each space | Automatic | every space on this computer: Automatic or a configuration, then locked until **Unlink**; the chip's menu sets it and makes new ones |
 
 Only in `toolkit.json` (fine as they are for most people): `pr.refreshSeconds` (60), `issues.refreshSeconds` (120), `gcloud.refreshMinutes` (2), `gcloud.tokenCheckMinutes` (10), `context.staleMinutes` (10), `github.accounts` (owner pins).
 
@@ -435,11 +449,14 @@ toolkit/
                           panel-body stack holds the five panels
   keys.json               layout:toolkit keys, merged by the installer
   shared/config.js        settings defaults + load/save; copied into each mod
+  shared/gh.js gcloud.js  gh logins and gcloud configurations, linked per space
+  shell/space-env.zsh     per-space env for new terminals (CLOUDSDK_ACTIVE_CONFIG_NAME)
   mods/
     toolkit-tabs/             tab bar: names, context, gcloud, buttons; publishes toolkit.json
       context.js          status-line snapshot readings
     toolkit-panel/            one mod, six panels chosen by props.panel (+ diff.js, the side-by-side dialog)
       files.js changes.js git.js diff.js pr.js issues.js preview.js lib.js icons/
+      gcloud-menu.js      the gcloud chip's menu (a popup)
     toolkit-open-with/        the editor picker
     toolkit-settings/         the settings window
     toolkit-chrome/           Herdr's sidebar header and footer

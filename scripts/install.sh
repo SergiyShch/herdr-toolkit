@@ -45,7 +45,7 @@ PY
 }
 
 if [ "$mode" = remove ]; then
-  run rm -f "$dest/layouts/toolkit.json"
+  run rm -f "$dest/layouts/toolkit.json" "$dest/toolkit-space-env.zsh"
   for m in $mods; do [ -f "$dest/mods/$m/.herdr-toolkit" ] && run rm -rf "$dest/mods/$m"; done
   merge_keys remove
   echo "Removed. Switch layouts with ctrl-shift-l if Herdr still shows toolkit."
@@ -70,6 +70,12 @@ for m in $mods; do
   run touch "$dest/mods/$m/.herdr-toolkit"
 done
 merge_keys add
+# The shell snippet: per-space environment for new terminals (~/.zshrc sources it).
+run cp "$src/shell/space-env.zsh" "$dest/toolkit-space-env.zsh"
+if [ "$mode" != dry ] && ! grep -qs "toolkit-space-env.zsh" "$HOME/.zshrc"; then
+  echo "Per-space gcloud in terminals: add this line at the end of ~/.zshrc:"
+  echo "  [[ -r ~/.config/herdr-app/toolkit-space-env.zsh ]] && source ~/.config/herdr-app/toolkit-space-env.zsh"
+fi
 if [ "$mode" != dry ] && command -v herdr-app >/dev/null 2>&1; then
   for m in $mods; do herdr-app check "$dest/mods/$m"; done
   echo "Installed. Switch to it: herdr-app do layout.switch --name toolkit   (ctrl-shift-l goes back)"

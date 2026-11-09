@@ -12,7 +12,8 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, Input, InputState } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, knownAgents, appHome, writeTextFile, readTextFile, notify, home, run, spaces } from "herdr";
 import { cfg, get, setSetting, resetSettings, DEFAULTS, SETTINGS_FILE } from "./config.js";
-import { ghLogins, switchGhAccount, addGhAccount, spaceAccount } from "./gh.js";
+import { ghLogins, switchGhAccount, addGhAccount } from "./gh.js";
+import { gcloudConfigs } from "./gcloud.js";
 
 const ICON = "mods/toolkit-panel/icons/";
 const SECTIONS = [
@@ -62,6 +63,12 @@ export default class Settings extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.readLogins(cx);
+    cx.spawn(async (cx) => {
+      this.configs = await gcloudConfigs();
+      const rc = await readTextFile(`${home()}/.zshrc`).catch(() => null);
+      this.snippet = rc == null ? null : rc.includes("toolkit-space-env.zsh");
+      cx.notify();
+    });
     cx.spawn(async (cx) => {
       try { this.agents = (await knownAgents()).filter((a) => a.installed); } catch { this.agents = []; }
       cx.notify();
@@ -226,7 +233,12 @@ export default class Settings extends View {
       .child(this.toggle(t, "gcloud.enabled", "Show gcloud login", "A chip in the tab bar: green when logged in, red when not or expired"))
       .child(this.choice(t, "gcloud.label", "Chip shows", null, [["project", "Project"], ["account", "Account"], ["none", "Dot only"]], off))
       .child(this.toggle(t, "gcloud.tokenCheck", "Catch an expired login", "Asks gcloud for an access token now and then. Uses the network.", off))
-      .child(this.text(t, "gcloud.loginArgs", "Login command", "What the login button runs after gcloud, e.g. auth login --update-adc", off));
+      .child(this.text(t, "gcloud.loginArgs", "Login command", "What the login button runs after gcloud, e.g. auth login --update-adc", off))
+      .child(div().h(18))
+      .child(this.heading(t, "Configuration for each space"))
+      .child(div().pb(6).text_size(12.5).line_height("18px").text_color(t.dim)
+        .child(`The chip reads the space's configuration. New terminals in the space use it too (CLOUDSDK_ACTIVE_CONFIG_NAME), ${this.snippet === false ? "once ~/.zshrc sources toolkit-space-env.zsh (see the guide)" : this.snippet ? "from toolkit-space-env.zsh, which ~/.zshrc sources" : "with toolkit-space-env.zsh in ~/.zshrc"}. The chip's menu makes new configurations.`))
+      .children(this.spaceRows(t, "gcloud.spaces", this.configs ? this.configs.map((x) => x.name) : null, { none: "gcloud's active configuration", missing: "gcloud has no such configuration", disabled: off }));
   }
 
   githubPage(t, c) {
@@ -249,7 +261,7 @@ export default class Settings extends View {
       .child(this.heading(t, "Account for each space"))
       .child(div().pb(6).text_size(12.5).line_height("18px").text_color(t.dim)
         .child("The PR and Issues panels read GitHub as the space's account. The account menu in their header links the space you're in."))
-      .children(this.spaceRows(t, list))
+      .children(this.spaceRows(t, "github.spaces", list.filter((l) => l.ok).map((l) => l.login), { none: "The first account that can see each repository", missing: "not logged in" }))
       .child(div().h(18))
       .child(this.heading(t, "Which account reads a repository"))
       .child(this.toggle(t, "github.autoAccount", "Find it automatically", "The PR and Issues panels use the first account that can see the repository, active one first"))
@@ -257,29 +269,29 @@ export default class Settings extends View {
   }
 
   // One row per space on this computer, plus links to spaces that are gone.
-  spaceRows(t, list) {
-    const links = get("github.spaces") ?? {};
-    const save = (id, login) => {
-      const next = { ...(get("github.spaces") ?? {}) };
-      if (login) next[id] = login; else delete next[id];
-      this.set("github.spaces", next);
+  // `path`: github.spaces or gcloud.spaces (space id -> name); `names`: what a
+  // space can be linked to (logins, configurations). A linked space is locked
+  // until it is unlinked.
+  spaceRows(t, path, names, { none, missing, disabled = false }) {
+    const links = get(path) ?? {};
+    const save = (id, name) => {
+      const next = { ...(get(path) ?? {}) };
+      if (name) next[id] = name; else delete next[id];
+      this.set(path, next);
     };
     const here = spaces().filter((s) => !s.machine);
     const gone = Object.keys(links).filter((id) => !spaces().some((s) => s.id === id));
-    const logins = list.filter((l) => l.ok).map((l) => l.login);
     return [
       ...here.map((s, i) => {
-        const now = spaceAccount(s.id), title = `${s.name}${s.active ? " · this space" : ""}`;
-        // Linked: locked to its login until it is unlinked.
-        if (now) return this.row(t, title, `Locked to ${now}${logins.includes(now) ? "" : " (not logged in)"}`,
+        const now = links[s.id] || null, title = `${s.name}${s.active ? " · this space" : ""}`;
+        if (now) return this.row(t, title, `Locked to ${now}${!names || names.includes(now) ? "" : ` (${missing})`}`,
           h_flex().gap(10).items_center()
             .child(svg(`${ICON}lock.svg`).size(13).text_color(t.dim))
-            .child(this.button(t, `set-gh-unlink-${i}`, "Unlink", () => save(s.id, null))));
-        return this.choice(t, `github.spaces.${s.id}`, title, "The first account that can see each repository",
-          [["", "Automatic"], ...logins.map((l) => [l, l])], false, { now: "", pick: (v) => save(s.id, v) });
+            .child(this.button(t, `set-${path}-unlink-${i}`, "Unlink", () => save(s.id, null))), disabled);
+        return this.choice(t, `${path}.${s.id}`, title, none, [["", "Automatic"], ...(names ?? []).map((n) => [n, n])], disabled, { now: "", pick: (v) => save(s.id, v) });
       }),
       ...gone.map((id, i) => this.row(t, "A space that's closed", `Linked to ${links[id]}`,
-        this.button(t, `set-gh-gone-${i}`, "Unlink", () => save(id, null)))),
+        this.button(t, `set-${path}-gone-${i}`, "Unlink", () => save(id, null)), disabled)),
     ];
   }
 

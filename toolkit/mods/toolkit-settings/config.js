@@ -35,6 +35,7 @@ export const DEFAULTS = {
     tokenCheckMinutes: 10,
     refreshMinutes: 2,
     loginArgs: ["auth", "login"],  // e.g. ["auth", "login", "--update-adc"]
+    spaces: {},              // link a space to a gcloud configuration: { "<space id>": "ad-dev" }; the chip's menu sets it
   },
   jira: {
     baseUrl: "",             // e.g. "https://your-site.atlassian.net": DS-1234 opens <baseUrl>/browse/DS-1234

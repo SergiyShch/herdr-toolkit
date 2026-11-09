@@ -5,7 +5,8 @@
 // repository's open GitHub issues) and "preview" (one file, chosen with
 // shared "toolkit.preview"). Each is a child of the `panel-body` stack; toolkit-tabs
 // selects one. A sixth, "diff", is not in the stack: the Changes panel opens it
-// as a dialog (a file's last commit and working tree side by side).
+// as a dialog (a file's last commit and working tree side by side). "gcloud" is
+// the tab bar's gcloud chip menu, a popup (a space's gcloud configuration).
 // Panels are derived from Kanso's kanso-panel (Apache-2.0).
 import { View } from "gpui-kit";
 import { props } from "herdr";
@@ -16,8 +17,9 @@ import { Issues } from "./issues.js";
 import { Preview } from "./preview.js";
 import { Diff } from "./diff.js";
 import { Git } from "./git.js";
+import { GcloudMenu } from "./gcloud-menu.js";
 
-const PANELS = { files: Files, changes: Changes, git: Git, pr: PullRequest, issues: Issues, preview: Preview, diff: Diff };
+const PANELS = { files: Files, changes: Changes, git: Git, pr: PullRequest, issues: Issues, preview: Preview, diff: Diff, gcloud: GcloudMenu };
 
 export default class Panel extends View {
   init(_props, cx) {

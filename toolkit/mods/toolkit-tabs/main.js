@@ -12,7 +12,9 @@
 // - + opens the shipped new-menu.
 // - gcloud: who is logged in (dot: green yes, red no or expired), the project
 //   in the chip, account and project in the tooltip; the small button beside it
-//   runs `gcloud auth login` in a new tab (also cmd-alt-g).
+//   runs `gcloud auth login` in a new tab (also cmd-alt-g). A space can be locked
+//   to a gcloud configuration (gcloud.spaces): the chip then reads that one, and
+//   its menu (a toolkit-panel popup) links, unlinks or makes a new one.
 // - Open in editor (cmd-shift-o): the toolkit-open-with popup for the focused pane,
 //   dropped down under the button when clicked.
 // - Tabs wrap onto more rows when they don't fit (tabs.wrap); the bar grows to fit.
@@ -23,6 +25,7 @@ import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, layout, settings, exec, focused, nextCommand } from "herdr";
 import { ClaudeContext, cleanTitle } from "./context.js";
 import { cfg, readSettings, SHARED_KEY, jiraKey, jiraUrl } from "./config.js";
+import { spaceConfig, gcloudLogin, gcloudConfigs, newGcloudConfig, watchNewConfig } from "./gcloud.js";
 import { shared, setShared, notify } from "herdr";
 
 const ICON = "mods/toolkit-panel/icons/";
@@ -86,6 +89,11 @@ export function tabJira(tab, tabPanes) {
 
 const isClaude = (p) => p?.app === "claude-code" || p?.program?.key === "claude";
 
+// What the gcloud chip reads: the shown space and its configuration. The chip
+// reads again when it changes (a switch of space, a link, an unlink).
+const gcloudKey = () => { const sp = spaces().find((s) => s.active)?.id ?? null; return `${sp}|${spaceConfig(sp) ?? ""}`; };
+const GCLOUD_MENU_W = 300;
+
 function age(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
   return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
@@ -123,6 +131,7 @@ export default class Tabs extends View {
         const c = await nextCommand();
         if (c === "gcloud-login") this.gcloudLogin();
         if (c === "gcloud-refresh") this.gcloudRefresh(cx, true);
+        if (c === "gcloud-new") this.gcloudNew(cx);
         if (c === "jira-open") this.openJira();
         cx.notify();
       }
@@ -150,21 +159,28 @@ export default class Tabs extends View {
 
   // Account and project from the active configuration; `token`: also ask for an
   // access token (catches an expired or revoked login; uses the network).
+  // A space locked to a configuration reads that one (`--configuration`).
   gcloudRefresh(cx, token = false) {
     if (this.gcloudBusy || !cfg().gcloud.enabled) return;
     this.gcloudBusy = true;
+    const space = spaces().find((s) => s.active)?.id ?? null, config = spaceConfig(space);
+    this.gcloudKey = gcloudKey();
+    const as = config ? [`--configuration=${config}`] : [];
+    // Another configuration than last time: its token hasn't been checked.
+    const same = this.gcloud.config === config;
     cx.spawn(async (cx) => {
-      const next = { at: Date.now(), tokenAt: this.gcloud.tokenAt, tokenOk: this.gcloud.tokenOk };
+      const next = { at: Date.now(), config, space, tokenAt: same ? this.gcloud.tokenAt : 0, tokenOk: same ? this.gcloud.tokenOk : undefined };
+      if (!same) token = true;
       try {
-        const r = await exec("gcloud", ["config", "list", "--format=json"]).catch(() => null);
+        const r = await exec("gcloud", ["config", "list", "--format=json", ...as]).catch(() => null);
         if (!r) { next.state = "missing"; return; }
         if (r.code !== 0) throw new Error((r.stderr || "").trim().split("\n")[0] || "gcloud failed");
         const core = JSON.parse(r.stdout || "{}").core ?? {};
         next.account = core.account ?? null; next.project = core.project ?? null;
-        const list = await exec("gcloud", ["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]);
+        const list = await exec("gcloud", ["auth", "list", "--filter=status:ACTIVE", "--format=value(account)", ...as]);
         next.active = list.code === 0 ? list.stdout.trim() || null : null;
         if (token && next.active && cfg().gcloud.tokenCheck) {
-          const t = await exec("gcloud", ["auth", "print-access-token", "--verbosity=none"]).catch(() => ({ code: 1 }));
+          const t = await exec("gcloud", ["auth", "print-access-token", "--verbosity=none", ...as]).catch(() => ({ code: 1 }));
           next.tokenOk = t.code === 0; next.tokenAt = Date.now();
         }
         if (!next.active) next.tokenOk = false;
@@ -197,9 +213,22 @@ export default class Tabs extends View {
   gcloudLogin() {
     this.loginAt = Date.now();
     this.gcloud = { ...this.gcloud, tokenAt: 0 };
+    gcloudLogin(spaces().find((s) => s.active)?.id);
+  }
+
+  // A new configuration for the shown space, made in a new tab; once it has an
+  // account it is linked to the space (the tab bar lives on, so it waits here).
+  gcloudNew(cx) {
     const space = spaces().find((s) => s.active);
-    const args = cfg().gcloud.loginArgs;
-    run("tab.new", { name: "gcloud login", space: space?.id, argv: ["gcloud", ...(Array.isArray(args) && args.length ? args : ["auth", "login"])] });
+    if (!space) return;
+    cx.spawn(async (cx) => {
+      const before = (await gcloudConfigs()).map((c) => c.name);
+      newGcloudConfig(space.id);
+      this.loginAt = Date.now();
+      const name = await watchNewConfig(space.id, before, cx);
+      if (name) notify({ title: `gcloud: ${name} locked to ${space.name}`, body: "New terminals in this space use it (with the toolkit's shell snippet)." });
+      cx.notify();
+    });
   }
 
   gcloudChip(t, stop) {
@@ -210,17 +239,24 @@ export default class Tabs extends View {
     const label = o.label === "none" ? null : o.label === "account" ? (g.active ?? g.account ?? "not logged in") : (g.project ?? (g.state === "loading" ? "gcloud" : "no project"));
     const tip = g.state === "loading" ? "gcloud: checking…"
       : g.state === "error" ? `gcloud: ${g.error}`
-      : [g.state === "in" ? `Logged in as ${g.active}` : g.state === "expired" ? `${g.active}: the login expired, log in again` : "Not logged in to gcloud",
+      : [g.config ? `Configuration ${g.config}, locked to this space` : null,
+        g.state === "in" ? `Logged in as ${g.active}` : g.state === "expired" ? `${g.active}: the login expired, log in again` : "Not logged in to gcloud",
         `Project: ${g.project ?? "none set"}`, g.account && g.account !== g.active ? `Configured account: ${g.account}` : null,
-        g.at ? `Checked ${age(g.at)} · click to check again` : null].filter(Boolean).join("\n");
-    const loginTip = g.state === "in" ? "gcloud auth login (switch account)" : "Log in: gcloud auth login";
+        g.at ? `Checked ${age(g.at)} · click for the space's configuration` : null].filter(Boolean).join("\n");
+    const loginTip = g.state === "in" ? `gcloud auth login${g.config ? ` --configuration ${g.config}` : ""} (switch account)` : `Log in: gcloud auth login${g.config ? ` --configuration ${g.config}` : ""}`;
     return h_flex().flex_none().items_center().gap(1)
       .child(h_flex().id("gcloud-chip").h(26).pl(7).pr(8).gap(6).items_center().rounded(6).text_size(11.5).text_color(t.muted)
-        .tooltip(tip).hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
-        .on_click((_e, cx) => this.gcloudRefresh(cx, true))
+        .tooltip(tip).hover((s) => s.bg(t.hover).text_color(t.foreground))
+        // The menu drops down under the chip, its left edge on the chip's.
+        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.gcloudAt = e.bounds ?? null; })
+        .on_click(() => {
+          const b = this.gcloudAt, at = b ? { x: Math.max(8, Math.round(b.x)), y: Math.round(b.y + b.height + 6) } : "pointer";
+          openOverlay({ mod: "toolkit-panel", kind: "popup", at, width: GCLOUD_MENU_W, props: { panel: "gcloud" } });
+        })
         .child(svg("icons/gcloud.svg").size(13).text_color(t.muted))
         .child(div().size(6).flex_none().rounded_full().bg(color))
-        .when(Boolean(label), (el) => el.child(div().max_w(150).truncate().child(label))))
+        .when(Boolean(label), (el) => el.child(div().max_w(150).truncate().child(label)))
+        .when(Boolean(g.config), (el) => el.child(svg(`${ICON}lock.svg`).size(10).text_color(t.dim))))
       .child(div().id("gcloud-login").size(22).flex_none().flex().items_center().justify_center().rounded(6)
         .text_color(g.state === "in" ? t.dim : t.ansi1).tooltip(loginTip)
         .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
@@ -276,7 +312,8 @@ export default class Tabs extends View {
       .tooltip(tip).child(`${r.pct}%`);
   }
 
-  render() {
+  render(cx) {
+    if (cfg().gcloud.enabled && gcloudKey() !== this.gcloudKey) this.gcloudRefresh(cx, true);
     const t = theme();
     const space = spaces().find((p) => p.active);
     const shown = space?.tabs ?? [];

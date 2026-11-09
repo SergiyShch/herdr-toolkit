@@ -47,7 +47,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **Tabs that name themselves.** An unnamed tab shows the Jira key its branch carries (`DS-1234`) or its agent's own title. A name you type always wins.
 - **Jira everywhere.** Set your site and every key like `DS-1234` links to its ticket: on tabs (`⌘⌥J`), pull request titles, branches, descriptions and comments, issues, and Markdown previews.
 - **Claude Code context %** on each Claude tab, from its status line. An idle agent keeps its last reading, dimmed, with its age in the tooltip.
-- **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`.
+- **gcloud login at a glance.** A chip shows whether you're logged in and to which project. A small button runs `gcloud auth login`. Lock a space to a gcloud configuration from the chip's menu, and new terminals in that space use it.
 - **Your editor, one key away.** A Finder button opens the focused pane's folder in Finder. `⌘⇧O` or the **Editor** button opens the pane's folder, or a file from Files, in Cursor, VS Code, Zed, Windsurf, Sublime, a JetBrains IDE, Xcode, or Neovim, Helix or Vim in a split.
 - **Settings for all of it.** **herdr-toolkit settings** opens from the ⚙ in the tab bar (or `⌘⌥,`). Every feature can be turned off or tuned there. Changes apply live and are saved to `~/.config/herdr-app/toolkit.json`.
 
