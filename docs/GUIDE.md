@@ -108,6 +108,8 @@ A hidden panel does no work: it doesn't run git or `gh` and catches up when you 
 - **Unpin owner/name** shows when the repository has its own pin, which wins over the space.
 - **Account settings…** opens settings → GitHub. It lists every login with **Make active** (`gh auth switch`, so your terminals' `gh` uses it too), every space on this computer (an unlinked one gets a choice of logins; a linked one shows its lock and **Unlink**), links to spaces that are gone, to unlink, and the pinned repositories.
 
+An `origin` behind an ssh alias (`git@github-work:org/repo`, with `HostName github.com` in `~/.ssh/config`) counts as GitHub too.
+
 Which account reads a repository, in order: its pin (`github.repos`, settings → GitHub → Pinned), the space's account, the owner's pin (`github.accounts`, `{"my-org": "login"}`, only in `toolkit.json`), then automatic. The token is read inside a shell (`GH_TOKEN=$(gh auth token -u …)`), so it never appears in a process list. Your active `gh` account doesn't change, and neither do your terminals: this is for the panels (and Create PR) only.
 
 ### Files

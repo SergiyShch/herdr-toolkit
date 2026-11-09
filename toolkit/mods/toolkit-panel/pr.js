@@ -174,14 +174,11 @@ export class PullRequest {
         if (top.code !== 0) { this.outside = true; this.error = null; this.none = false; this.pr = null; this.openPrs = []; return; }
         this.outside = false;
         this.root = top.stdout.trim();
-        const [branch, remote] = await Promise.all([
-          exec("git", ["branch", "--show-current"], { cwd: this.root, on }),
-          exec("git", ["remote", "get-url", "origin"], { cwd: this.root, on }).catch(() => null),
-        ]);
+        const branch = await exec("git", ["branch", "--show-current"], { cwd: this.root, on });
         this.branch = branch.stdout.trim() || null;
-        this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
         const who = await ghAccount(this.root, on);
         if (key() !== context) return;
+        this.home = who.repo ? `${who.repo.owner}/${who.repo.name}` : null;
         this.account = who.account; this.ghRepo = who.repo; this.pinned = who.pinned;
         this.logins = await ghLogins(on);
         // The repository's open ones, read alongside the one shown.

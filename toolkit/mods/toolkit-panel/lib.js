@@ -94,11 +94,34 @@ export function ghAs(account, args, opts) {
 
 const probing = new Map();
 
-// The repository's GitHub owner/name, from its origin remote.
+// A remote URL's host, owner and name, and whether it goes over ssh:
+// https://host/o/n(.git), ssh://user@host:port/o/n, user@host:o/n. Pure, for tests.
+export function parseRemote(url) {
+  const u = String(url ?? "").trim();
+  let m = /^(https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(u);
+  if (m) return { host: m[2].toLowerCase(), owner: m[3], name: m[4], ssh: /^(ssh|git)$/i.test(m[1]) };
+  m = /^(?:[^@/:]+@)?([^/:]+):(?!\/)([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(u);
+  return m ? { host: m[1].toLowerCase(), owner: m[2], name: m[3], ssh: true } : null;
+}
+
+// The host an ssh alias stands for (`ssh -G`: ~/.ssh/config's HostName), cached
+// per machine. An alias like github-work picks a key for one GitHub account.
+const sshHosts = new Map();
+function sshHost(alias, on) {
+  const k = `${on ?? ""}|${alias}`;
+  if (!sshHosts.has(k)) sshHosts.set(k, exec("ssh", ["-G", alias], { on })
+    .then((r) => /^hostname\s+(\S+)/im.exec(r.stdout ?? "")?.[1]?.toLowerCase() ?? alias).catch(() => alias));
+  return sshHosts.get(k);
+}
+
+// The repository's GitHub owner/name, from its origin remote: github.com, or an
+// ssh alias whose HostName is github.com (gh resolves those the same way).
 export async function githubRepo(root, on) {
   const r = await exec("git", ["remote", "get-url", "origin"], { cwd: root, on }).catch(() => null);
-  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?\s*$/.exec(r?.stdout ?? "");
-  return m ? { owner: m[1], name: m[2] } : null;
+  const remote = parseRemote(r?.stdout);
+  if (!remote) return null;
+  const host = remote.host === "github.com" || !remote.ssh ? remote.host : await sshHost(remote.host, on);
+  return host === "github.com" ? { owner: remote.owner, name: remote.name } : null;
 }
 
 // What decides the account for a repository, in order: its own pin

@@ -76,6 +76,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 ## GitHub accounts (`gh.js`, `lib.js`)
 
 - `ghAccount(root, on, space = location().space)` → `{ repo, account, pinned }`. `pinFor` order: `github.repos` (`pinned: "repo"`), `github.spaces[<space id>]` (`"space"`), `github.accounts` by owner (`"owner"`), else the automatic probe (cached in shared `toolkit.gh.accounts`).
+- `githubRepo` reads `origin` with `parseRemote` (pure): `github.com`, or an ssh alias (`git@github-work:o/n`) whose `ssh -G` HostName is `github.com`, cached per machine. Many remotes here use such aliases; a `github.com`-only regex silently skips every account rule for them.
 - The PR/Issues account menu (`accountPicker`) links the **active space** (`linkSpace`) and then locks: a linked space shows only its login and **Unlink** (settings → GitHub too). Repository pins are set in settings only (the menu can unpin the shown one). The trigger shows `pinFor` from current settings, not the panel's last read.
 - Panels store `accountKey()` (active space + `cfg().github`) on each `refresh` and read again in `render` when it differs: a link, an unpin or a space switch rereads even when `key()` (cwd + machine) didn't change, and a `reload` dropped because a read was running still happens.
 - "Log in to another account…": `addGhAccount(space, { link, on, cx, done })` snapshots `gh auth status`, opens the `gh auth login` tab, then polls every 3 s (`cx.sleep`; mods have no `setTimeout`) for up to 10 min. It links the first new login, else one that became active.
