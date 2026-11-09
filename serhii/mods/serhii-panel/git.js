@@ -10,7 +10,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { exec, watchFolder, theme, settings, home, run, spaces, shared, setShared, openOverlay } from "herdr";
-import { location, key, isShown, cfg, insideRoot, ICON } from "./lib.js";
+import { location, key, isShown, cfg, insideRoot, defaultBranch, ICON } from "./lib.js";
 
 const ROW = 22, LIST = 26, SCOPE = "serhii.gitScope", TAB = "serhii.gitTab";
 // Graph columns take the terminal's hues in turn.
@@ -22,8 +22,8 @@ export function parseGraph(stdout) {
   return stdout.split("\n").filter(Boolean).map((line) => {
     const at = line.indexOf("\x01");
     if (at < 0) return { graph: line.replace(/\s+$/, "") };
-    const [sha, refs, subject, when, author] = line.slice(at + 1).split("\x00");
-    return { graph: line.slice(0, at).replace(/\s+$/, ""), sha, refs: parseRefs(refs ?? ""), subject: subject ?? "", when: when ?? "", author: author ?? "" };
+    const [sha, full, refs, subject, when, author] = line.slice(at + 1).split("\x00");
+    return { graph: line.slice(0, at).replace(/\s+$/, ""), sha, full, refs: parseRefs(refs ?? ""), subject: subject ?? "", when: when ?? "", author: author ?? "" };
   });
 }
 
@@ -74,12 +74,29 @@ export function parseCommitFiles(names, nums) {
   return out;
 }
 
+// Each repository's base (origin's default branch), asked again after 5 min.
+const BASES = new Map(), BASE_MS = 5 * 60000;
+async function baseOf(root, on) {
+  const k = `${on ?? ""}|${root}`, hit = BASES.get(k);
+  if (hit && Date.now() - hit.at < BASE_MS) return hit.base;
+  const base = await defaultBranch(root, on).catch(() => null);
+  BASES.set(k, { base, at: Date.now() });
+  return base;
+}
+
+// The graph's scopes: every branch, the checked-out branch's whole history,
+// or only its own commits (since it forked from the base).
+const SCOPES = ["all", "head", "branch"];
+
 export class Git {
   init(cx) {
     this.root = null; this.branch = ""; this.worktrees = []; this.branches = []; this.rows = [];
     this.error = null; this.width = 400; this.height = 600;
     this.tab = ["graph", "branches", "worktrees"].includes(shared(TAB)) ? shared(TAB) : "graph";
-    this.all = shared(SCOPE) !== "current";
+    // "current" is what this setting was called before "branch" existed.
+    const saved = shared(SCOPE) === "current" ? "head" : shared(SCOPE);
+    this.scope = SCOPES.includes(saved) ? saved : "all";
+    this.own = new Set(); this.base = null; this.fork = null;
     this.scroll = VirtualListScrollHandle.new();
     this.refresh(cx);
     cx.timer.every(15000, (cx) => this.refresh(cx));
@@ -101,14 +118,33 @@ export class Git {
         if (top.code !== 0) { this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = "Not a git repository"; return; }
         const [root, common, head] = top.stdout.trim().split("\n");
         const commonDir = common.startsWith("/") ? common : `${root}/${common}`;
-        const [wt, refs, remotes, log] = await Promise.all([
+        const [wt, refs, remotes, base] = await Promise.all([
           git(["worktree", "list", "--porcelain"], root),
           git(["for-each-ref", "--sort=-committerdate", "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(committerdate:relative)%00%(worktreepath)", "refs/heads"], root),
           git(["remote"], root),
-          git(["log", "--graph", "--date-order", "--color=never", `-n${Math.max(50, Math.min(2000, Number(cfg().git?.graphLimit) || 300))}`,
-            "--format=%x01%h%x00%D%x00%s%x00%ar%x00%an", ...(this.all ? ["--branches", "--remotes", "--tags", "HEAD"] : ["HEAD"])], root),
+          baseOf(root, on),
         ]);
         if (key() !== context) return;
+        // The branch's own commits: on HEAD but not on the base (what a pull request holds).
+        const branch = head === "HEAD" ? "" : head, baseRef = base ? `refs/remotes/origin/${base}` : null;
+        const compare = Boolean(baseRef && branch && branch !== base);
+        const scope = this.scope;
+        const range = scope === "all" ? ["--branches", "--remotes", "--tags", "HEAD"] : scope === "branch" && compare ? [`${baseRef}..HEAD`] : ["HEAD"];
+        const [log, own, fork] = await Promise.all([
+          scope === "branch" && !compare ? Promise.resolve({ code: 0, stdout: "", stderr: "" })
+            : git(["log", "--graph", "--date-order", "--color=never", `-n${Math.max(50, Math.min(2000, Number(cfg().git?.graphLimit) || 300))}`,
+              "--format=%x01%h%x00%H%x00%D%x00%s%x00%ar%x00%an", ...range], root),
+          compare ? git(["rev-list", "--max-count=2000", `${baseRef}..HEAD`], root) : null,
+          compare ? git(["merge-base", "HEAD", baseRef], root) : null,
+        ]);
+        let forkInfo = null;
+        if (fork?.code === 0 && fork.stdout.trim()) {
+          const f = await git(["log", "-1", "--format=%h%x00%s%x00%ar", fork.stdout.trim()], root);
+          if (f.code === 0) { const [sha, subject, when] = f.stdout.trim().split("\0"); forkInfo = { sha, subject, when }; }
+        }
+        if (key() !== context || scope !== this.scope) return;
+        this.base = base; this.compare = compare; this.fork = forkInfo;
+        this.own = new Set(own?.code === 0 ? own.stdout.split("\n").filter(Boolean) : []);
         REMOTES = remotes.code === 0 ? remotes.stdout.split("\n").filter(Boolean) : ["origin"];
         this.root = root; this.branch = head === "HEAD" ? "" : head; this.error = null;
         this.worktrees = wt.code === 0 ? parseWorktrees(wt.stdout) : [];
@@ -151,9 +187,25 @@ export class Git {
     });
   }
 
-  setScope(all, cx) { this.all = all; this.toTop = true; setShared(SCOPE, all ? "all" : "current"); this.refresh(cx); cx.notify(); }
+  setScope(scope, cx) { this.scope = scope; this.toTop = true; this.commit = null; setShared(SCOPE, scope); this.refresh(cx); cx.notify(); }
 
   // Puts a branch's tip in view in the graph.
+  // What the graph shows now, in one line.
+  scopeNote() {
+    const n = this.own.size, own = `${n} commit${n === 1 ? "" : "s"} not on ${this.base}`;
+    if (this.scope === "all") return this.compare ? `Every branch · highlighted: ${this.branch}'s ${own}` : "Every branch, remote branch and tag";
+    if (this.scope === "head") return this.compare ? `${this.branch}'s whole history · highlighted: its ${own}` : "The checked-out branch's whole history";
+    return this.compare ? `Only ${this.branch}'s own commits: ${own}` : "Only the branch's own commits";
+  }
+
+  emptyNote() {
+    if (this.scope !== "branch") return "No commits yet";
+    if (!this.base) return "origin has no default branch to compare with";
+    if (!this.branch) return "HEAD is detached: check out a branch to see its own commits";
+    if (this.branch === this.base) return `This is ${this.base}, the base itself`;
+    return `Nothing on ${this.branch} that ${this.base} doesn't have`;
+  }
+
   setTab(tab, cx) { this.tab = tab; setShared(TAB, tab); cx.notify(); }
 
   // Shows the graph with a branch's tip marked (the list mounts first, then scrolls).
@@ -254,14 +306,17 @@ export class Git {
 
   graphRow(r, i, t) {
     const picked = Boolean(r.sha) && this.commit?.sha === r.sha;
+    // The branch's own commits stand out among the others (all of them are, in "Since base").
+    const mine = this.scope !== "branch" && Boolean(r.full) && this.own.has(r.full);
     const row = h_flex().id(`git-row-${i}`).w(this.width).h(ROW).flex_none().px(10).gap(6).items_center().overflow_hidden()
+      .when(mine, (e) => e.bg(t.accent + "16"))
       .when(this.found === i || picked, (e) => e.bg(t.selected))
       .child(this.graphCell(r.graph, t));
     if (!r.sha) return row;
     // The click is the list's on_item_click: a handler inside a virtual list's renderer throws.
     return row.cursor_pointer().hover((s) => s.bg(t.hover))
       .tooltip(`${r.sha} · ${r.author} · ${r.when}\n${r.subject}\nClick: its files`)
-      .child(div().flex_none().text_color(t.dim).child(r.sha))
+      .child(div().flex_none().text_color(mine || this.scope === "branch" ? t.accent : t.dim).child(r.sha))
       .children(r.refs.map((ref) => this.refChip(ref, t)))
       .child(div().flex_1().min_w(0).truncate().child(r.subject))
       .child(div().flex_none().text_size(10.5).text_color(t.dim).child(r.when.replace(/ ago$/, "")));
@@ -314,16 +369,22 @@ export class Git {
     const empty = (text) => div().px(14).py(12).text_size(12).text_color(t.dim).child(text);
     const graph = () => v_flex().flex_1().min_h(0)
       .child(h_flex().h(36).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border)
-        .child(div().text_size(11).text_color(t.dim).child(this.commit ? "Click a file below to compare it" : "Click a commit to see its files"))
-        .child(div().flex_1())
-        .child(chip("git-scope-all", "All branches", this.all, (cx) => this.setScope(true, cx)))
-        .child(chip("git-scope-head", "This branch", !this.all, (cx) => this.setScope(false, cx))))
+        .child(chip("git-scope-all", "All branches", this.scope === "all", (cx) => this.setScope("all", cx)))
+        .child(chip("git-scope-head", "This branch", this.scope === "head", (cx) => this.setScope("head", cx)))
+        .child(chip("git-scope-branch", this.base ? `Since ${this.base}` : "Since base", this.scope === "branch", (cx) => this.setScope("branch", cx))))
+      .child(div().px(14).py(4).flex_none().truncate().text_size(11).text_color(t.dim).border_b(1).border_color(t.border)
+        .child(this.scopeNote()))
       .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5)
         .child(v_virtual_list("git-graph", this.rows.length, ROW, (i) => String(i),
           (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full()
           .on_item_click((k, cx) => { const r = this.rows[Number(k)]; if (r?.sha) this.openCommit(r, cx); }))
         .child(Scrollbar.vertical("git-graph").viewport_from_layout().absolute().inset_0())
-        .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? "No commits yet"))))
+        .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? this.emptyNote()))))
+      .when(this.scope === "branch" && Boolean(this.fork), (e) => e.child(h_flex().h(28).flex_none().px(14).gap(6).items_center().border_t(1).border_color(t.border)
+        .text_size(11).text_color(t.dim).tooltip(`${this.fork.sha} ${this.fork.subject}\n${this.fork.when}`)
+        .child(div().flex_none().child(`⑂ forked from ${this.base} at`))
+        .child(div().flex_none().text_color(t.muted).child(this.fork.sha))
+        .child(div().min_w(0).truncate().child(this.fork.subject))))
       .when(Boolean(this.commit), (e) => e.child(this.commitView(t)));
     const branches = () => v_flex().id("git-branches").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)
       .child(div().px(8).pb(4).text_size(11).text_color(t.dim).child("Newest first. ● checked out · ◐ in another worktree · click: show in the graph"))

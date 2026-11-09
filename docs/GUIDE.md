@@ -137,7 +137,11 @@ The repository of the pane you're in, at a glance. It only reads git: it never c
 - Three tabs under it, each with the panel's full height: **Graph**, **Branches** (with a count) and **Worktrees** (only when there is more than one). The tab you used last is remembered.
 - **Worktrees** (when there is more than one): each with its branch and folder; the pane's own is highlighted. Click another to open a new tab in it.
 - **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to switch to the graph with its tip marked.
-- **Graph**: `git log --graph` of **All branches** (local, remote, tags) or **This branch**, with a label per branch (the checked-out one is `● name`, remote ones blue, tags yellow). Hover a commit for its author and full subject.
+- **Graph**: `git log --graph` with a label per branch (the checked-out one is `● name`, remote ones blue, tags yellow). Hover a commit for its author and full subject. Three scopes:
+  - **All branches**: every local and remote branch and tag, so forks and merges show as lines.
+  - **This branch**: the checked-out branch's whole history, including what it inherited from its base.
+  - **Since dev** (named after the base, origin's default branch): only the branch's own commits, the ones a pull request would hold, with where it forked at the bottom.
+  - In the first two, the branch's own commits are tinted and the line under the scopes says how many there are.
 - **Click a commit** to open a card under the graph (marked COMMIT) listing its files (status and `+added −removed`, against its first parent). Click a file to open it side by side as in Changes: the parent (`abc123^`) on the left, the commit on the right; the arrows walk on through the commit's other files. Click the commit again, or ×, to close the list.
 - It reads again on every commit, checkout, fetch or branch change (the repository's git folder, on this computer), and every 15 s.
 
@@ -343,7 +347,7 @@ It looks like Herdr's own Settings and saves as you click. There is no Save butt
 | | Commit from Changes | on | |
 | | Create PR from Changes | on | push + `gh pr create --fill` |
 | | Create pull requests as drafts | on | Changes and PR panels |
-| | Git graph shows | 300 commits | 100 to 2000, every branch or only the checked-out one |
+| | Git graph shows | 300 commits | 100 to 2000, in any of the three scopes |
 | | Repositories in subfolders | on | a folder that isn't a repository shows each one inside it |
 | | Look for them | 2 deep | 1 to 5 folders below the pane's folder |
 | | Pull request sections | all on | Description · People · Checks · Threads · Comments · Agent · Files |
