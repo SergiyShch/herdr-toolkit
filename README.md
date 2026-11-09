@@ -40,7 +40,7 @@ without their whole layouts: no pane strip, no new sidebar, no tracker setup.
 - **A right side panel** with **Files**, **Changes**, **Git**, **Pull requests** and **Issues**. It follows the pane you're in, so each session sees its own repository.
   - **PR**: every open pull request, with labels, comments, checks, unresolved threads, reviewers, files and diffs, and merge. One click hands your agent a **Code review**, **Describe change**, **Explain**, **Address feedback** or **Resolve conflicts** task in a new tab.
   - **Issues** (off by default): the repository's open GitHub issues, grouped and filterable. Click one to open it in the browser, or **Start** to put your agent on it.
-  - **Git**: the repository's worktrees, its branches (the checked-out one marked, ↑↓ against upstream) and the commit graph with branch labels.
+  - **Git**: the repository's worktrees, its branches (the checked-out one marked, ↑↓ against upstream) and the commit graph with branch labels. Click a commit to see its files and open any of them side by side.
   - **Changes**: click a file to compare it side by side (HEAD | working tree), as in an IDE.
   - **Changes** in a folder of repositories (not one itself) shows each repository in its own section, with a filter chip per repository, and commits to the one you pick. **Create PR** beside Commit pushes the branch and opens a draft pull request from its commits.
   - **Several `gh` accounts?** Each repository is read with the logged-in account that can see it, found automatically. The account menu in the panel header switches it per repository or adds one.

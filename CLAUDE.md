@@ -66,6 +66,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - One refresh = 5 git calls: `rev-parse --show-toplevel --git-common-dir --abbrev-ref HEAD`, then `worktree list --porcelain`, `for-each-ref refs/heads`, `remote` and `log --graph` in parallel. It watches the git common dir (local), so commits, checkouts and fetches in any worktree refresh it; plus a 15 s timer.
 - `log --format=%x01%h%x00%D…`: `\x01` splits the graph prefix from the fields. `parseGraph` / `parseRefs` / `parseWorktrees` are exported and pure, for Node tests.
 - Read-only on purpose: no checkout or fetch from the panel.
+- A click on a commit: `git show --format= --no-renames --diff-merges=first-parent` with `--name-status -z` and `--numstat -z` (`parseCommitFiles`), listed under the graph. A file opens `diff.js` with `rev`: it diffs with `git show -U1000000 <rev> -- path` (works for root commits; merges against the first parent) and doesn't watch.
 - The Node stub for `herdr` also needs `appHome` and `writeTextFile` (config.js imports them).
 
 ## Tab bar wrapping (`serhii-tabs`)

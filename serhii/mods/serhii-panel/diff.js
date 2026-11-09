@@ -6,6 +6,8 @@
 // the last (first) change on to the next (previous) file of the list.
 // Opened by the Changes panel as a dialog of this mod with props
 // { panel: "diff", root, path, on, fresh, hasHead, status, files: [those, per file] }.
+// With `rev` (a commit, from the Git panel) it compares the commit's first
+// parent (left) with the commit (right) instead, and doesn't watch the file.
 // New for herdr-serhii.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
@@ -82,7 +84,7 @@ export class Diff {
   init(cx, p) {
     this.overlay = p.overlay;
     // The Changes list's files, in its order; the arrows walk on through them.
-    const self = { root: p.root, path: p.path, on: p.on, fresh: p.fresh, hasHead: p.hasHead, status: p.status };
+    const self = { root: p.root, path: p.path, on: p.on, fresh: p.fresh, hasHead: p.hasHead, status: p.status, rev: p.rev };
     this.files = Array.isArray(p.files) && p.files.length ? p.files : [self];
     this.index = this.files.findIndex((f) => f.root === p.root && f.path === p.path);
     if (this.index < 0) { this.files = [self, ...this.files]; this.index = 0; }
@@ -101,7 +103,7 @@ export class Diff {
     const f = this.files[k];
     this.index = k;
     this.root = f.root; this.path = f.path; this.on = f.on ?? null;
-    this.fresh = Boolean(f.fresh); this.hasHead = f.hasHead !== false; this.status = f.status ?? "M";
+    this.fresh = Boolean(f.fresh); this.hasHead = f.hasHead !== false; this.status = f.status ?? "M"; this.rev = f.rev ?? null;
     this.rows = []; this.view = []; this.changes = []; this.current = -1; this.open = new Set();
     this.error = null; this.loading = true; this.limited = false;
     this.load(cx, where);
@@ -116,7 +118,14 @@ export class Diff {
       try {
         let lines;
         if (!insideRoot(path)) throw new Error("Cannot show this file");
-        if (this.fresh || (!this.hasHead && this.status === "A")) {
+        if (this.rev) {
+          // The commit against its first parent (a root commit: against nothing).
+          const r = await exec("git", ["show", "--format=", "--diff-merges=first-parent", "--no-renames", "-U1000000", "--no-ext-diff", "--no-textconv", "--no-color", this.rev, "--", path], { cwd: root, on });
+          if (r.code !== 0) throw new Error((r.stderr || "git show failed").trim());
+          const all = r.stdout.replace(/\n$/, "").split("\n"), at = all.findIndex((l) => l.startsWith("@@"));
+          if (at < 0) throw new Error(/^Binary files/m.test(r.stdout) ? "Binary file · no text diff" : "This commit doesn't change the file's text");
+          lines = all.slice(at);
+        } else if (this.fresh || (!this.hasHead && this.status === "A")) {
           const text = await readTextFile(`${root}/${path}`, { on }).catch(() => null);
           if (text === null) throw new Error("Cannot read this file (binary, too large, or unreadable)");
           if (text.includes("\0")) throw new Error("Binary file · no text diff");
@@ -143,7 +152,7 @@ export class Diff {
 
   // Reads again when the file's folder changes (this computer only), once per save storm.
   watch(cx) {
-    if (this.on) return;
+    if (this.on || this.rev) return;
     const { root, path } = this, here = () => !this.gone && this.root === root && this.path === path;
     const dir = `${root}/${path}`.replace(/\/[^/]*$/, "");
     cx.spawn(async (cx) => {
@@ -265,9 +274,9 @@ export class Diff {
         .child(icon("diff-refresh", "refresh", "Read again", (cx) => this.load(cx)))
         .child(icon("diff-close", "close", "Close (Esc)", () => closeOverlay(this.overlay))))
       .child(h_flex().h(26).flex_none().items_center().border_b(1).border_color(t.border).text_size(11).text_color(t.muted)
-        .child(div().flex_1().min_w(0).pl(54).truncate().child(this.fresh || this.status === "A" ? "(new file)" : `HEAD${this.on ? ` · ${this.on}` : ""}`))
+        .child(div().flex_1().min_w(0).pl(54).truncate().child(this.status === "A" ? "(new file)" : `${this.rev ? `${this.rev}^` : "HEAD"}${this.on ? ` · ${this.on}` : ""}`))
         .child(div().w(10).h_full().bg(t.border))
-        .child(div().flex_1().min_w(0).pl(54).truncate().child(this.status === "D" ? "(deleted)" : "Working tree")))
+        .child(div().flex_1().min_w(0).pl(54).truncate().child(this.status === "D" ? "(deleted)" : this.rev ?? "Working tree")))
       .child(this.error || (this.loading && !this.rows.length)
         ? div().p(16).text_color(t.dim).child(this.error ?? "Reading…")
         : div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(12)

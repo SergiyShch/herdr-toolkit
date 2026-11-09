@@ -2,12 +2,14 @@
 // its local branches (the checked-out one first, with ↑ahead ↓behind its
 // upstream) and the commit graph (`git log --graph`) with branch and tag
 // labels. Click a branch to find its tip in the graph; click another
-// worktree to open a tab there. Reads git only; it never checks anything out.
+// worktree to open a tab there; click a commit to list its files, and a
+// file to compare it with the commit's parent side by side (diff.js).
+// Reads git only; it never checks anything out.
 // New for herdr-serhii.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { exec, watchFolder, theme, settings, home, run, spaces, shared, setShared } from "herdr";
-import { location, key, isShown, cfg, ICON } from "./lib.js";
+import { exec, watchFolder, theme, settings, home, run, spaces, shared, setShared, openOverlay } from "herdr";
+import { location, key, isShown, cfg, insideRoot, ICON } from "./lib.js";
 
 const ROW = 22, LIST = 26, SCOPE = "serhii.gitScope";
 // Graph columns take the terminal's hues in turn.
@@ -54,6 +56,23 @@ export function parseWorktrees(stdout) {
   return out;
 }
 
+// A commit's files against its first parent: `--name-status -z` and
+// `--numstat -z` → [{ path, status, add, del, binary }].
+export function parseCommitFiles(names, nums) {
+  const stats = {};
+  for (const entry of nums.split("\0")) {
+    const [a, d, ...parts] = entry.split("\t");
+    if (parts.length) stats[parts.join("\t")] = { add: Number(a) || 0, del: Number(d) || 0, binary: a === "-" };
+  }
+  const list = names.split("\0"), out = [];
+  for (let i = 0; i + 1 < list.length; i += 2) {
+    const status = list[i].trim()[0], path = list[i + 1];
+    if (!status || !path) continue;
+    out.push({ path, status: status === "T" ? "M" : status, ...(stats[path] ?? { add: 0, del: 0 }) });
+  }
+  return out;
+}
+
 export class Git {
   init(cx) {
     this.root = null; this.branch = ""; this.worktrees = []; this.branches = []; this.rows = [];
@@ -69,7 +88,7 @@ export class Git {
     this.stale = false;
     if (this.loading) { this.again = true; return; }
     const { cwd, on } = location(), context = key();
-    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; }
+    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; }
     if (!cwd) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -159,12 +178,71 @@ export class Git {
       .child(ref.kind === "head" && ref.name !== "HEAD" ? `● ${ref.name}` : ref.name);
   }
 
+  // Lists a commit's files (one click on its row; again closes it).
+  openCommit(r, cx) {
+    if (this.commit?.sha === r.sha) { this.commit = null; cx.notify(); return; }
+    const root = this.root, context = this.context, on = location().on;
+    this.commit = { sha: r.sha, subject: r.subject, author: r.author, when: r.when, files: null, error: null };
+    const want = this.commit;
+    cx.spawn(async (cx) => {
+      try {
+        const show = (fmt) => exec("git", ["show", "--format=", "--no-renames", "--diff-merges=first-parent", fmt, "-z", r.sha], { cwd: root, on });
+        const [names, nums] = await Promise.all([show("--name-status"), show("--numstat")]);
+        if (this.commit !== want || this.context !== context) return;
+        if (names.code !== 0) throw new Error((names.stderr || "git show failed").trim().split("\n")[0]);
+        want.files = parseCommitFiles(names.stdout, nums.code === 0 ? nums.stdout : "").slice(0, 1000);
+      } catch (e) { if (this.commit === want) want.error = String(e?.message ?? e); }
+      finally { cx.notify(); }
+    });
+    cx.notify();
+  }
+
+  // One of the commit's files side by side: its first parent left, the commit right.
+  openCommitFile(f) {
+    const c = this.commit, on = location().on ?? null;
+    const one = (x) => ({ root: this.root, path: x.path, on, rev: c.sha, status: x.status, hasHead: true });
+    openOverlay({ mod: "serhii-panel", kind: "dialog", width: 0.94, height: 0.9,
+      props: { panel: "diff", ...one(f), files: c.files.filter((x) => insideRoot(x.path)).map(one) } });
+  }
+
+  commitFileRow(f, i, t) {
+    const parts = f.path.split("/"), name = parts.pop();
+    return h_flex().id(`git-cf-${i}`).h(LIST).flex_none().px(8).gap(8).items_center().rounded(6).cursor_pointer()
+      .hover((s) => s.bg(t.hover)).tooltip("Compare with the parent side by side").on_click(() => this.openCommitFile(f))
+      .child(div().w(14).flex_none().text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : t.blocked).child(f.status))
+      .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
+      .when(f.add > 0, (e) => e.child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${f.add}`)))
+      .when(f.del > 0, (e) => e.child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
+  }
+
+  // The picked commit under the graph: what it is, then its files.
+  commitView(t) {
+    const c = this.commit, files = c.files ?? [];
+    const h = Math.min(8, Math.max(1, files.length)) * LIST + 8;
+    return v_flex().flex_none().border_t(1).border_color(t.border)
+      .child(h_flex().h(30).flex_none().px(14).gap(6).items_center()
+        .child(div().flex_none().text_size(11).font_semibold().text_color(t.muted).child(c.sha))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).child(c.subject))
+        .child(div().id("git-commit-close").p(3).rounded(5).flex_none().cursor_pointer().text_color(t.muted).tooltip("Close")
+          .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { this.commit = null; cx.notify(); })
+          .child(svg(`${ICON}close.svg`).size(12))))
+      .child(div().px(14).pb(4).truncate().text_size(11).text_color(t.dim)
+        .child(`${c.author} · ${c.when}${c.files ? ` · ${files.length} file${files.length === 1 ? "" : "s"}` : ""}`))
+      .child(c.error ? div().px(14).pb(8).text_size(12).text_color(t.ansi1).child(c.error)
+        : !c.files ? div().px(14).pb(8).text_size(12).text_color(t.dim).child("Reading…")
+        : v_flex().id("git-commit-files").h(h).overflow_y_scrollbar().px(6).pb(6)
+          .children(files.map((f, i) => this.commitFileRow(f, i, t)))
+          .when(!files.length, (e) => e.child(div().px(8).text_size(12).text_color(t.dim).child("No file changes (an empty or merge-only commit)"))));
+  }
+
   graphRow(r, i, t) {
+    const picked = r.sha && this.commit?.sha === r.sha;
     const row = h_flex().id(`git-row-${i}`).w(this.width).h(ROW).flex_none().px(10).gap(6).items_center().overflow_hidden()
-      .when(this.found === i, (e) => e.bg(t.selected))
+      .when(this.found === i || picked, (e) => e.bg(t.selected))
       .child(this.graphCell(r.graph, t));
     if (!r.sha) return row;
-    return row.tooltip(`${r.sha} · ${r.author} · ${r.when}\n${r.subject}`)
+    return row.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.openCommit(r, cx))
+      .tooltip(`${r.sha} · ${r.author} · ${r.when}\n${r.subject}\nClick: its files`)
       .child(div().flex_none().text_color(t.dim).child(r.sha))
       .children(r.refs.map((ref) => this.refChip(ref, t)))
       .child(div().flex_1().min_w(0).truncate().child(r.subject))
@@ -236,6 +314,7 @@ export class Git {
             (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full())
           .child(Scrollbar.vertical("git-graph").viewport_from_layout().absolute().inset_0())
           .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? "No commits yet"))))
+        .when(Boolean(this.commit), (e) => e.child(this.commitView(t)))
       );
   }
 }
