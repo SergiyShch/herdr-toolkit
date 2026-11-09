@@ -30,6 +30,7 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - **Git safety.** Commit only the listed files (`--literal-pathspecs add -A -- <paths>`), never `git add -A` on the whole tree. Pushes go through `sh -c 'GIT_TERMINAL_PROMPT=0 exec git "$@"'` so they fail instead of waiting on a hidden prompt.
 - **GitHub.** Run gh through `ghAs(account, …)` with the account from `ghAccount(root, on)`, which picks the logged-in account that can see the repo.
 - **Derived files.** Each one keeps its "Derived from / Modified by" header. Add a `Modified for herdr-serhii:` line when you change what it does.
+- **Virtual lists** (`v_virtual_list`): no `on_click` (or any handler) inside the row renderer — it throws and the whole list draws blank, with nothing in `herdr-app status`. Use `.on_item_click((key, cx) => …)` on the list; `key` is what `get_key(i)` returned.
 - **Style.** No spinners: use slow `.loop("opacity")` dots, because `.spin()` redraws the whole window.
 
 ## Changes panel (`changes.js`)
@@ -88,7 +89,7 @@ There is no test suite. To exercise a panel's logic, run it in Node with stub mo
 
 1. Register a loader hook (`module.register`) that maps `herdr`, `gpui-kit` and `gpui-base` to stub files:
    - `exec` → `child_process.execFile` returning `{ code, stdout, stderr }`.
-   - Elements → a Proxy that records `child`/`children`/`id`/`on_click`.
+   - Elements → a Proxy that records `child`/`children`/`id`/`on_click`. Its `when(cond, fn)` must call `fn` when `cond` is truthy, or most of a panel is never built; make handlers throw while a `v_virtual_list` renderer runs, as the SDK does.
    - `watchFolder` → a promise that rejects.
 2. Drive `init` / `refresh` / `render` against throwaway repos in the scratchpad.
 

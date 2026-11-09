@@ -88,7 +88,7 @@ export class Git {
     this.stale = false;
     if (this.loading) { this.again = true; return; }
     const { cwd, on } = location(), context = key();
-    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; }
+    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; this.toTop = true; }
     if (!cwd) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -115,7 +115,14 @@ export class Git {
           const ahead = /ahead (\d+)/.exec(track)?.[1], behind = /behind (\d+)/.exec(track)?.[1];
           return { current: mark === "*", name, upstream, gone: track === "gone", ahead: Number(ahead ?? 0), behind: Number(behind ?? 0), when, worktree: worktree && worktree !== root ? worktree : "" };
         }).sort((a, b) => Number(b.current) - Number(a.current)) : [];
-        this.rows = log.code === 0 ? parseGraph(log.stdout) : [];
+        const rows = log.code === 0 ? parseGraph(log.stdout) : [];
+        // A virtual list left scrolled past its new, shorter content draws
+        // nothing: back to the top (a frame later) when the graph shrinks or changes scope.
+        if (this.toTop || rows.length < this.rows.length) {
+          this.toTop = false; this.found = null;
+          cx.timer.after(60, () => this.scroll?.scroll_to_item(0, "top"));
+        }
+        this.rows = rows;
         if (log.code !== 0 && !/does not have any commits/.test(log.stderr)) this.error = log.stderr.trim().split("\n")[0];
         this.watch(commonDir, context, cx);
       } catch (e) { if (key() === context) this.error = String(e?.message ?? e); }
@@ -142,7 +149,7 @@ export class Git {
     });
   }
 
-  setScope(all, cx) { this.all = all; setShared(SCOPE, all ? "all" : "current"); this.refresh(cx); cx.notify(); }
+  setScope(all, cx) { this.all = all; this.toTop = true; setShared(SCOPE, all ? "all" : "current"); this.refresh(cx); cx.notify(); }
 
   // Puts a branch's tip in view in the graph.
   reveal(name) {
@@ -236,12 +243,13 @@ export class Git {
   }
 
   graphRow(r, i, t) {
-    const picked = r.sha && this.commit?.sha === r.sha;
+    const picked = Boolean(r.sha) && this.commit?.sha === r.sha;
     const row = h_flex().id(`git-row-${i}`).w(this.width).h(ROW).flex_none().px(10).gap(6).items_center().overflow_hidden()
       .when(this.found === i || picked, (e) => e.bg(t.selected))
       .child(this.graphCell(r.graph, t));
     if (!r.sha) return row;
-    return row.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.openCommit(r, cx))
+    // The click is the list's on_item_click: a handler inside a virtual list's renderer throws.
+    return row.cursor_pointer().hover((s) => s.bg(t.hover))
       .tooltip(`${r.sha} · ${r.author} · ${r.when}\n${r.subject}\nClick: its files`)
       .child(div().flex_none().text_color(t.dim).child(r.sha))
       .children(r.refs.map((ref) => this.refChip(ref, t)))
@@ -311,7 +319,8 @@ export class Git {
           .child(scope("git-scope-head", "This branch", !this.all, (cx) => this.setScope(false, cx))))
         .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5)
           .child(v_virtual_list("git-graph", this.rows.length, ROW, (i) => String(i),
-            (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full())
+            (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full()
+            .on_item_click((k, cx) => { const r = this.rows[Number(k)]; if (r?.sha) this.openCommit(r, cx); }))
           .child(Scrollbar.vertical("git-graph").viewport_from_layout().absolute().inset_0())
           .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? "No commits yet"))))
         .when(Boolean(this.commit), (e) => e.child(this.commitView(t)))

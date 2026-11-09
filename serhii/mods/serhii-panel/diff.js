@@ -230,7 +230,7 @@ export class Diff {
     if (r.kind === "fold") {
       const label = r.hidden ? `⋯ ${r.count ? r.count + " " : ""}unchanged lines` : `⋯ ${r.count} unchanged line${r.count === 1 ? "" : "s"} · click to show`;
       return div().id(`diff-fold-${r.at}`).w(this.width).h(ROW).flex_none().px(12).flex().items_center().bg(t.raised).text_color(t.dim)
-        .when(!r.hidden, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => this.unfold(r.at, cx)))
+        .when(!r.hidden, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)))
         .child(label);
     }
     const parts = r.kind === "mod" ? split(r.l.text, r.r.text) : null;
@@ -281,7 +281,9 @@ export class Diff {
         ? div().p(16).text_color(t.dim).child(this.error ?? "Reading…")
         : div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(12)
           .child(v_virtual_list("diff-rows", this.view.length, ROW, (i) => String(i),
-            (range) => this.view.slice(range.start, range.end).map((r, k) => this.row(r, range.start + k, t))).track_scroll(this.scroll).size_full())
+            (range) => this.view.slice(range.start, range.end).map((r, k) => this.row(r, range.start + k, t))).track_scroll(this.scroll).size_full()
+            // A fold unfolds on a click; handlers inside a virtual list's renderer throw, so it is the list's.
+            .on_item_click((k, cx) => { const r = this.view[Number(k)]; if (r?.kind === "fold" && !r.hidden) this.unfold(r.at, cx); }))
           .child(Scrollbar.vertical("diff-rows").viewport_from_layout().absolute().inset_0()))
       .when(Boolean(this.limited), (e) => e.child(div().px(12).py(4).text_size(11).text_color(t.dim).border_t(1).border_color(t.border)
         .child(`Showing the first ${MAX_ROWS.toLocaleString()} lines of the diff`)));
