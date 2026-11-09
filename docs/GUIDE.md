@@ -134,10 +134,11 @@ A pinned repository wins over automatic. Owner pins (`github.accounts`, `{"my-or
 The repository of the pane you're in, at a glance. It only reads git: it never checks out, fetches or changes anything.
 
 - **The checked-out branch** sits in the header (or `detached`).
+- Three tabs under it, each with the panel's full height: **Graph**, **Branches** (with a count) and **Worktrees** (only when there is more than one). The tab you used last is remembered.
 - **Worktrees** (when there is more than one): each with its branch and folder; the pane's own is highlighted. Click another to open a new tab in it.
-- **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to find its tip in the graph. Click **Branches** to fold the list.
+- **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to switch to the graph with its tip marked.
 - **Graph**: `git log --graph` of **All branches** (local, remote, tags) or **This branch**, with a label per branch (the checked-out one is `● name`, remote ones blue, tags yellow). Hover a commit for its author and full subject.
-- **Click a commit** to list its files under the graph (status and `+added −removed`, against its first parent). Click a file to open it side by side as in Changes: the parent (`abc123^`) on the left, the commit on the right; the arrows walk on through the commit's other files. Click the commit again, or ×, to close the list.
+- **Click a commit** to open a card under the graph (marked COMMIT) listing its files (status and `+added −removed`, against its first parent). Click a file to open it side by side as in Changes: the parent (`abc123^`) on the left, the commit on the right; the arrows walk on through the commit's other files. Click the commit again, or ×, to close the list.
 - It reads again on every commit, checkout, fetch or branch change (the repository's git folder, on this computer), and every 15 s.
 
 ### Pull requests (PR)

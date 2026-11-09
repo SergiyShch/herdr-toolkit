@@ -1,7 +1,8 @@
 // The repository's shape at a glance: its worktrees (the pane's one marked),
 // its local branches (the checked-out one first, with ↑ahead ↓behind its
 // upstream) and the commit graph (`git log --graph`) with branch and tag
-// labels. Click a branch to find its tip in the graph; click another
+// labels, each on its own tab (Graph · Branches · Worktrees). Click a branch
+// to find its tip in the graph; click another
 // worktree to open a tab there; click a commit to list its files, and a
 // file to compare it with the commit's parent side by side (diff.js).
 // Reads git only; it never checks anything out.
@@ -11,7 +12,7 @@ import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } fr
 import { exec, watchFolder, theme, settings, home, run, spaces, shared, setShared, openOverlay } from "herdr";
 import { location, key, isShown, cfg, insideRoot, ICON } from "./lib.js";
 
-const ROW = 22, LIST = 26, SCOPE = "serhii.gitScope";
+const ROW = 22, LIST = 26, SCOPE = "serhii.gitScope", TAB = "serhii.gitTab";
 // Graph columns take the terminal's hues in turn.
 const LANES = ["ansi4", "ansi2", "ansi5", "ansi3", "ansi6", "ansi1"];
 
@@ -76,7 +77,8 @@ export function parseCommitFiles(names, nums) {
 export class Git {
   init(cx) {
     this.root = null; this.branch = ""; this.worktrees = []; this.branches = []; this.rows = [];
-    this.error = null; this.width = 400; this.foldBranches = false;
+    this.error = null; this.width = 400; this.height = 600;
+    this.tab = ["graph", "branches", "worktrees"].includes(shared(TAB)) ? shared(TAB) : "graph";
     this.all = shared(SCOPE) !== "current";
     this.scroll = VirtualListScrollHandle.new();
     this.refresh(cx);
@@ -152,9 +154,15 @@ export class Git {
   setScope(all, cx) { this.all = all; this.toTop = true; setShared(SCOPE, all ? "all" : "current"); this.refresh(cx); cx.notify(); }
 
   // Puts a branch's tip in view in the graph.
-  reveal(name) {
+  setTab(tab, cx) { this.tab = tab; setShared(TAB, tab); cx.notify(); }
+
+  // Shows the graph with a branch's tip marked (the list mounts first, then scrolls).
+  reveal(name, cx) {
     const i = this.rows.findIndex((r) => r.refs?.some((x) => x.name === name && x.kind !== "tag"));
-    if (i >= 0) { this.found = i; this.scroll.scroll_to_item(Math.max(0, i - 2), "top"); }
+    this.setTab("graph", cx);
+    if (i < 0) return;
+    this.found = i;
+    cx.timer.after(60, () => this.scroll?.scroll_to_item(i, "center"));
   }
 
   openWorktree(path) {
@@ -225,10 +233,12 @@ export class Git {
   // The picked commit under the graph: what it is, then its files.
   commitView(t) {
     const c = this.commit, files = c.files ?? [];
-    const h = Math.min(8, Math.max(1, files.length)) * LIST + 8;
-    return v_flex().flex_none().border_t(1).border_color(t.border)
-      .child(h_flex().h(30).flex_none().px(14).gap(6).items_center()
-        .child(div().flex_none().text_size(11).font_semibold().text_color(t.muted).child(c.sha))
+    // Up to 45% of the panel; the graph keeps the rest.
+    const h = Math.min(Math.max(1, files.length) * LIST + 8, Math.max(3 * LIST, Math.round(this.height * 0.45)));
+    return v_flex().flex_none().border_t(2).border_color(t.accent + "88").bg(t.raised)
+      .child(h_flex().h(34).flex_none().px(14).gap(8).items_center()
+        .child(div().flex_none().px(6).h(18).flex().items_center().rounded(4).bg(t.accent + "26").text_size(10).font_semibold().text_color(t.accent).child("COMMIT"))
+        .child(div().flex_none().text_size(11.5).font_semibold().text_color(t.muted).child(c.sha))
         .child(div().flex_1().min_w(0).truncate().text_size(12).child(c.subject))
         .child(div().id("git-commit-close").p(3).rounded(5).flex_none().cursor_pointer().text_color(t.muted).tooltip("Close")
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { this.commit = null; cx.notify(); })
@@ -237,7 +247,7 @@ export class Git {
         .child(`${c.author} · ${c.when}${c.files ? ` · ${files.length} file${files.length === 1 ? "" : "s"}` : ""}`))
       .child(c.error ? div().px(14).pb(8).text_size(12).text_color(t.ansi1).child(c.error)
         : !c.files ? div().px(14).pb(8).text_size(12).text_color(t.dim).child("Reading…")
-        : v_flex().id("git-commit-files").h(h).overflow_y_scrollbar().px(6).pb(6)
+        : v_flex().id("git-commit-files").h(h).overflow_y_scrollbar().px(6).py(4).bg(t.background).border_t(1).border_color(t.border)
           .children(files.map((f, i) => this.commitFileRow(f, i, t)))
           .when(!files.length, (e) => e.child(div().px(8).text_size(12).text_color(t.dim).child("No file changes (an empty or merge-only commit)"))));
   }
@@ -259,10 +269,10 @@ export class Git {
 
   branchRow(b, t) {
     const status = [b.ahead ? `↑${b.ahead}` : "", b.behind ? `↓${b.behind}` : "", b.gone ? "gone" : ""].filter(Boolean).join(" ");
-    return h_flex().id(`git-branch-${b.name}`).h(LIST).flex_none().px(8).gap(6).items_center().rounded(6).cursor_pointer()
+    return h_flex().id(`git-branch-${b.name}`).h(32).flex_none().px(10).gap(8).items_center().rounded(6).cursor_pointer()
       .when(b.current, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
       .tooltip([b.name, b.upstream ? `tracks ${b.upstream}` : "no upstream", b.worktree ? `checked out in ${this.short(b.worktree)}` : "", b.when].filter(Boolean).join("\n"))
-      .on_click(() => this.reveal(b.name))
+      .on_click((_e, cx) => this.reveal(b.name, cx))
       .child(div().w(10).flex_none().text_color(b.current ? t.accent : t.dim).child(b.current ? "●" : b.worktree ? "◐" : "○"))
       .child(div().min_w(0).flex_shrink(1).truncate().when(b.current, (e) => e.font_semibold()).child(b.name))
       .child(div().flex_1())
@@ -272,25 +282,60 @@ export class Git {
 
   worktreeRow(w, t) {
     const here = w.path === this.root;
-    return h_flex().id(`git-wt-${w.path}`).h(LIST).flex_none().px(8).gap(6).items_center().rounded(6)
+    return h_flex().id(`git-wt-${w.path}`).h(44).flex_none().px(10).gap(10).items_center().rounded(6)
       .when(here, (e) => e.bg(t.selected)).when(!here && !w.bare, (e) => e.cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => this.openWorktree(w.path)))
       .tooltip(here ? `${w.path}\nthis pane's worktree` : `${w.path}\nclick: open a tab here`)
-      .child(svg(`${ICON}${here ? "monitor" : "branch"}.svg`).size(13).flex_none().text_color(here ? t.accent : t.muted))
-      .child(div().flex_none().max_w(160).truncate().when(here, (e) => e.font_semibold()).child(w.bare ? "(bare)" : w.detached ? `detached ${w.head}` : w.branch || w.head))
-      .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.short(w.path)));
+      .child(svg(`${ICON}${here ? "monitor" : "branch"}.svg`).size(14).flex_none().text_color(here ? t.accent : t.muted))
+      .child(v_flex().flex_1().min_w(0).gap(2)
+        .child(h_flex().gap(6).items_center()
+          .child(div().min_w(0).truncate().when(here, (e) => e.font_semibold()).child(w.bare ? "(bare)" : w.detached ? `detached ${w.head}` : w.branch || w.head))
+          .when(here, (e) => e.child(div().flex_none().px(5).h(16).flex().items_center().rounded(4).bg(t.accent + "26").text_size(10).text_color(t.accent).child("this pane"))))
+        .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.short(w.path))));
   }
 
   render(cx) {
     if (isShown(this.id) && (this.stale || key() !== this.context)) this.refresh(cx);
     const t = theme(), name = this.root?.split("/").pop();
-    const heading = (label, extra) => h_flex().h(24).flex_none().px(14).gap(6).items_center().text_size(11).text_color(t.muted).child(div().font_semibold().child(label)).child(extra ?? div());
-    const scope = (id, label, on, action) => div().id(id).h(20).px(7).flex().items_center().rounded(10).text_size(11).cursor_pointer()
+    const chip = (id, label, on, action) => div().id(id).h(22).px(8).flex().items_center().rounded(11).text_size(11).cursor_pointer()
       .border_1().border_color(on ? t.accent : t.border).when(on, (e) => e.bg(t.selected)).text_color(on ? t.foreground : t.muted)
       .hover((s) => s.bg(t.hover)).on_click((_e, cx) => action(cx)).child(label);
-    const others = this.branches.length;
-    const listH = Math.min(this.foldBranches ? 0 : 8, others) * LIST;
+    // Graph · Branches · Worktrees: one at a time, each with the panel's full height.
+    const wts = this.worktrees.length > 1;
+    const tab = this.tab === "worktrees" && !wts ? "graph" : this.tab;
+    const tabButton = (id, label, count) => {
+      const on = tab === id;
+      return v_flex().id(`git-tab-${id}`).h_full().px(10).flex_none().justify_center().cursor_pointer()
+        .border_b(2).border_color(on ? t.accent : "#00000000").hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => this.setTab(id, cx))
+        .child(h_flex().gap(5).items_center()
+          .child(div().text_size(12.5).text_color(on ? t.foreground : t.muted).when(on, (e) => e.font_semibold()).child(label))
+          .when(count !== null, (e) => e.child(div().px(5).h(16).flex().items_center().rounded(8).bg(t.raised).text_size(10).text_color(t.dim).child(String(count)))));
+    };
+    const empty = (text) => div().px(14).py(12).text_size(12).text_color(t.dim).child(text);
+    const graph = () => v_flex().flex_1().min_h(0)
+      .child(h_flex().h(36).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border)
+        .child(div().text_size(11).text_color(t.dim).child(this.commit ? "Click a file below to compare it" : "Click a commit to see its files"))
+        .child(div().flex_1())
+        .child(chip("git-scope-all", "All branches", this.all, (cx) => this.setScope(true, cx)))
+        .child(chip("git-scope-head", "This branch", !this.all, (cx) => this.setScope(false, cx))))
+      .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5)
+        .child(v_virtual_list("git-graph", this.rows.length, ROW, (i) => String(i),
+          (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full()
+          .on_item_click((k, cx) => { const r = this.rows[Number(k)]; if (r?.sha) this.openCommit(r, cx); }))
+        .child(Scrollbar.vertical("git-graph").viewport_from_layout().absolute().inset_0())
+        .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? "No commits yet"))))
+      .when(Boolean(this.commit), (e) => e.child(this.commitView(t)));
+    const branches = () => v_flex().id("git-branches").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)
+      .child(div().px(8).pb(4).text_size(11).text_color(t.dim).child("Newest first. ● checked out · ◐ in another worktree · click: show in the graph"))
+      .children(this.branches.map((b) => this.branchRow(b, t)))
+      .when(!this.branches.length, (e) => e.child(empty("No local branches")));
+    const worktrees = () => v_flex().id("git-worktrees").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)
+      .child(div().px(8).pb(4).text_size(11).text_color(t.dim).child("Click another worktree to open a tab in it"))
+      .children(this.worktrees.map((w) => this.worktreeRow(w, t)));
     return v_flex().id("git").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
+      .on_size_change((size, cx) => {
+        if (size.width !== this.width || size.height !== this.height) { this.width = size.width; this.height = size.height; cx.notify(); }
+      })
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Git"))
         .when(Boolean(name), (e) => e.child(div().min_w(0).truncate().text_size(12).text_color(t.dim).child(name)))
@@ -301,29 +346,12 @@ export class Git {
           .child(div().max_w(180).truncate().text_size(12).child(this.branch || "detached"))))
         .child(div().id("git-refresh").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Read again")
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.refresh(cx)).child(svg(`${ICON}refresh.svg`).size(14))))
-      .when(!this.root, (e) => e.child(div().p(14).text_color(t.dim).child(this.error ?? (this.loading ? "Reading…" : "No folder"))))
+      .when(!this.root, (e) => e.child(empty(this.error ?? (this.loading ? "Reading…" : "No folder"))))
       .when(Boolean(this.root), (e) => e
-        .when(this.worktrees.length > 1, (e) => e.child(v_flex().flex_none().pt(6).pb(4).border_b(1).border_color(t.border)
-          .child(heading(`Worktrees · ${this.worktrees.length}`))
-          .child(v_flex().id("git-worktrees").max_h(4 * LIST + 4).overflow_y_scrollbar().px(6)
-            .children(this.worktrees.map((w) => this.worktreeRow(w, t))))))
-        .child(v_flex().flex_none().pt(6).pb(4).border_b(1).border_color(t.border)
-          .child(div().id("git-branches-head").cursor_pointer().on_click((_e, cx) => { this.foldBranches = !this.foldBranches; cx.notify(); })
-            .child(heading(`Branches · ${others}`, svg(`mods/serhii-panel/chevron-${this.foldBranches ? "right" : "down"}.svg`).size(11).text_color(t.dim))))
-          .when(!this.foldBranches, (e) => e.child(v_flex().id("git-branches").h(listH + 4).overflow_y_scrollbar().px(6)
-            .children(this.branches.map((b) => this.branchRow(b, t))))))
-        .child(h_flex().h(30).flex_none().px(14).gap(6).items_center()
-          .child(div().text_size(11).font_semibold().text_color(t.muted).child("Graph"))
-          .child(div().flex_1())
-          .child(scope("git-scope-all", "All branches", this.all, (cx) => this.setScope(true, cx)))
-          .child(scope("git-scope-head", "This branch", !this.all, (cx) => this.setScope(false, cx))))
-        .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11.5)
-          .child(v_virtual_list("git-graph", this.rows.length, ROW, (i) => String(i),
-            (range) => this.rows.slice(range.start, range.end).map((r, k) => this.graphRow(r, range.start + k, t))).track_scroll(this.scroll).size_full()
-            .on_item_click((k, cx) => { const r = this.rows[Number(k)]; if (r?.sha) this.openCommit(r, cx); }))
-          .child(Scrollbar.vertical("git-graph").viewport_from_layout().absolute().inset_0())
-          .when(!this.rows.length, (e) => e.child(div().absolute().top(6).px(14).text_color(t.dim).child(this.error ?? "No commits yet"))))
-        .when(Boolean(this.commit), (e) => e.child(this.commitView(t)))
-      );
+        .child(h_flex().h(36).flex_none().px(4).items_end().border_b(1).border_color(t.border).bg(t.chrome ?? t.background)
+          .child(tabButton("graph", "Graph", null))
+          .child(tabButton("branches", "Branches", this.branches.length))
+          .when(wts, (e) => e.child(tabButton("worktrees", "Worktrees", this.worktrees.length))))
+        .child(tab === "graph" ? graph() : tab === "branches" ? branches() : worktrees()));
   }
 }
