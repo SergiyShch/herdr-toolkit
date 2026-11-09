@@ -81,6 +81,11 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 
 - Drops `serhii-open-with` down under itself: `openOverlay({ kind: "popup", at: { x, y } })` from the button's `bounds` (taken on mouse down), right edges aligned. `⌘⇧O` (keys.json `mod.open`) still uses mod.json's `at: "top"`.
 
+## PR panel look (`pr.js`)
+
+- Every section is `card(c)` (bordered, `c.card` = theme `raised`) with `section()` as its header band; `block()`/the card's inner `v_flex().px(G.md).py(G.sm)` pads the content. The top of the PR is a card too: branch chips, a verdict badge, stat tiles, then the actions.
+- Actions are `pill()` (bordered buttons); `quietLink()` stays for "Show more" and the like.
+
 ## Diff colours
 
 - Changed lines use the theme's ANSI hue at alpha `78` (≈47%): the theme's greens and reds are muted, so lower alphas barely show on dark. The side-by-side dialog marks the differing part at `c8`.

@@ -273,7 +273,7 @@ export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 export function tokens(t) {
   return {
     canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
-    border: t.border, subtle: t.hover ?? t.raised, selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface,
+    border: t.border, subtle: t.hover ?? t.raised, card: t.raised ?? t.surface ?? t.hover, selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
     red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5, mono: settings().font_family ?? "JetBrains Mono",
   };

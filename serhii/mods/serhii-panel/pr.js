@@ -18,7 +18,8 @@
 //
 // Modified for herdr-serhii: one of the serhii-panel mod's panels (reads only while
 // shown); adds Code review and Describe change agent tasks, and an open-in-browser
-// button on each row of the open list.
+// button on each row of the open list. Each section is a bordered card with a
+// header band; the numbers are small tiles and the actions bordered buttons.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, notify, theme } from "herdr";
@@ -88,6 +89,21 @@ function labelChip(l, c, small = false) {
     .child(div().max_w(small ? 140 : 160).truncate().text_size(small ? 11 : 11.5).text_color(c.text).child(l.name));
 }
 const visible = (list) => (list ?? []).filter((x) => !x.isMinimized);
+
+// A bordered button for an action (quietLink is for "show more" and the like).
+function pill(id, label, onClick, c, options = {}) {
+  const disabled = Boolean(options.disabled);
+  return Button.new(id).h(28).px(11).flex_none().items_center().rounded(6).border_1().border_color(c.border)
+    .disabled(disabled).accessibility_label(options.label ?? label)
+    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)))
+    .on_click((_e, cx) => { if (!disabled) onClick(cx); })
+    .child(div().text_size(12).text_color(disabled ? c.dim : options.color ?? c.text).child(label));
+}
+
+// One section of the pull request: a bordered card with a header band.
+function card(c) {
+  return v_flex().w_full().rounded(10).border_1().border_color(c.border).bg(c.card).overflow_hidden();
+}
 
 function quietLink(id, label, onClick, c, options = {}) {
   const disabled = Boolean(options.disabled);
@@ -487,10 +503,10 @@ export class PullRequest {
             .when(cfg().pr.rowActions && cfg().pr.tasks.review, (el) => el.child(quietLink(`pr-row-review-${i}`, "Review", () => this.agentTask("review", p), c, { size: 11.5 })))
             .when(cfg().pr.rowActions && cfg().pr.tasks.describe, (el) => el.child(quietLink(`pr-row-describe-${i}`, "Describe", () => this.agentTask("describe", p), c, { size: 11.5 })))));
     };
-    return v_flex().w_full().gap(G.xl)
-      .children(groups.map(([title, rows]) => v_flex().w_full().gap(2)
+    return v_flex().w_full().gap(G.md)
+      .children(groups.map(([title, rows]) => card(c)
         .child(this.section(c, title, String(rows.length)))
-        .children(rows.map(row))))
+        .child(v_flex().w_full().p(G.xs).gap(2).children(rows.map(row)))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
         .child(div().text_size(12).text_color(c.dim).child(`${this.branch} has no pull request yet.`))
         .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Pushing and creating…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
@@ -509,7 +525,7 @@ export class PullRequest {
   header(c, narrow) {
     const pr = this.pr, pill = this.listing || this.canSwitch();
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.listing ? "Open pull requests" : "Pull request"))
+      .child(div().flex_none().text_size(narrow ? 16 : 18).font_semibold().text_color(c.text).child(this.listing ? (narrow ? "Open PRs" : "Open pull requests") : (narrow ? "PR" : "Pull request")))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(pill, (el) => el.child(this.switchPill(c)))
         .when(Boolean(this.root) && !this.outside, (el) => el.child(accountPicker(this, c, "pr")))
@@ -543,10 +559,16 @@ export class PullRequest {
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
 
+  // A card's header band: the section's name, and a quiet note on the right.
   section(c, title, note) {
-    return h_flex().w_full().items_end().justify_between().pb(G.sm)
-      .child(div().text_size(15).text_color(c.text).child(title))
-      .child(div().text_size(12).text_color(c.dim).child(note ?? ""));
+    return h_flex().w_full().h(36).flex_none().px(G.md).gap(G.sm).items_center().justify_between().border_b(1).border_color(c.border)
+      .child(div().text_size(12).font_semibold().text_color(c.muted).child(title))
+      .child(div().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(note ?? ""));
+  }
+
+  // A section: its band, then its content with the card's padding.
+  block(c, title, note, content) {
+    return card(c).child(this.section(c, title, note)).child(v_flex().w_full().px(G.md).py(G.sm).child(content));
   }
 
   verdict(c) {
@@ -580,40 +602,47 @@ export class PullRequest {
       { value: String(visible(pr.comments).length), unit: visible(pr.comments).length === 1 ? "comment" : "comments" },
       { value: String(checks.length), unit: checks.length === 1 ? "check" : "checks" },
     ];
-    const primary = Button.new("pr-merge").h(30).px(14).flex_none().items_center().rounded(6)
+    const primary = Button.new("pr-merge").h(28).px(14).flex_none().items_center().rounded(6)
       .disabled(!canMerge || Boolean(this.busy))
       .bg(canMerge ? (arming ? c.red : c.primary) : c.subtle)
       .when(canMerge && !this.busy, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
       .on_click((_e, cx) => { if (canMerge && !this.busy) this.merge(cx); })
       .child(div().text_size(12).font_medium().text_color(canMerge ? (arming ? "#ffffff" : c.primaryText) : c.dim)
         .child(this.busy === "Merge" ? "Merging…" : arming ? "Press again to merge" : "Merge"));
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
-        .child(div().text_size(15).text_color(c.muted).child(`${this.local(pr.url) ? "" : `${this.repo()?.o}/${this.repo()?.r} `}#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`))
-        .child(div().w_full().text_size(narrow ? 22 : 28).line_height(1.25).font_light().text_color(c.text).child(pr.title))
-        .child(h_flex().pt(G.xs).gap(G.sm).items_center()
-          .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
-          .child(div().text_size(15).text_color(c.text).child(v.text)))
-        .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · ")))
+    const branchChip = (name) => div().min_w(0).max_w(220).truncate().px(6).h(20).flex().items_center().rounded(5).bg(c.subtle)
+      .font_family(c.mono).text_size(11).text_color(c.text).child(name);
+    return card(c).p(G.md).gap(G.md)
+      .child(v_flex().gap(G.sm)
+        .child(h_flex().w_full().flex_wrap().gap(6).items_center().text_size(12).text_color(c.dim)
+          .child(div().flex_none().child(`${this.local(pr.url) ? "" : `${this.repo()?.o}/${this.repo()?.r} `}#${pr.number}`))
+          .child(branchChip(pr.headRefName)).child(div().flex_none().child("→")).child(branchChip(pr.baseRefName)))
+        .child(div().w_full().text_size(narrow ? 17 : 20).line_height(1.3).font_semibold().text_color(c.text).child(pr.title))
+        .child(h_flex().w_full().flex_wrap().gap(G.sm).items_center()
+          .child(h_flex().h(22).px(8).gap(6).flex_none().items_center().rounded(11).bg(v.color + "24")
+            .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
+            .child(div().text_size(12).font_medium().text_color(v.color === c.dim ? c.muted : v.color).child(v.text)))
+          .child(div().min_w(0).text_size(11.5).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`].filter(Boolean).join(" · "))))
+        .when(Boolean(this.fallback), (el) => el.child(div().text_size(11.5).text_color(c.dim).child(`The newest open one: ${this.branch ?? "this branch"} has none.`)))
         .child(this.tags(c)))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
-      .when(open, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
+      // The numbers as small tiles, three to a row.
+      .child(h_flex().w_full().flex_wrap().gap(6)
+        .children(stats.map((s) => v_flex().flex_1().min_w(narrow ? 84 : 96).px(10).py(6).gap(1).rounded(8).bg(c.canvas).border_1().border_color(c.border)
+          .child(div().text_size(15).font_semibold().text_color(s.value.startsWith("+") ? c.green : s.value.startsWith("−") ? c.red : c.text).child(s.value))
+          .child(div().text_size(11).text_color(c.dim).child(s.unit)))))
+      .when(open, (el) => el.child(h_flex().w_full().flex_wrap().gap(G.sm).items_center().pt(G.xs).border_t(1).border_color(c.border)
         .child(primary)
         .child(pr.isDraft
-          ? quietLink("pr-ready", this.busy === "Ready" ? "Marking ready…" : "Ready for review", (cx) => this.act("Ready", ["pr", "ready", pr.url], cx), c, { disabled: Boolean(this.busy) })
-          : quietLink("pr-draft", "Back to draft", (cx) => this.act("Draft", ["pr", "ready", pr.url, "--undo"], cx), c, { disabled: Boolean(this.busy) }))
-        .child(quietLink("pr-close", "Close", (cx) => this.act("Close", ["pr", "close", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
-      .when(pr.state === "CLOSED", (el) => el.child(h_flex().child(quietLink("pr-reopen", "Reopen", (cx) => this.act("Reopen", ["pr", "reopen", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
+          ? pill("pr-ready", this.busy === "Ready" ? "Marking ready…" : "Ready for review", (cx) => this.act("Ready", ["pr", "ready", pr.url], cx), c, { disabled: Boolean(this.busy) })
+          : pill("pr-draft", "Back to draft", (cx) => this.act("Draft", ["pr", "ready", pr.url, "--undo"], cx), c, { disabled: Boolean(this.busy) }))
+        .child(pill("pr-close", "Close", (cx) => this.act("Close", ["pr", "close", pr.url], cx), c, { disabled: Boolean(this.busy), color: c.red }))))
+      .when(pr.state === "CLOSED", (el) => el.child(h_flex().child(pill("pr-reopen", "Reopen", (cx) => this.act("Reopen", ["pr", "reopen", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
   // Labels (with their picker) and the Jira ticket the title or branch names.
   tags(c) {
     const pr = this.pr, jira = jiraChips("pr", [pr.title, pr.headRefName], c, { loose: true });
-    return h_flex().w_full().pt(G.sm).flex_wrap().gap(6).items_center()
+    return h_flex().w_full().flex_wrap().gap(6).items_center()
       .children(jira)
       .children((pr.labels ?? []).map((l) => labelChip(l, c)))
       .when(!(pr.labels ?? []).length && !jira.length, (el) => el.child(div().text_size(12).text_color(c.dim).child("No labels")))
@@ -624,8 +653,9 @@ export class PullRequest {
   comments(c) {
     const all = visible(this.pr.comments), open = this.expanded.comments;
     const list = open ? all : all.slice(-5);
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Comments", String(all.length)))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .when(all.length > list.length, (el) => el.child(h_flex().pb(G.sm).child(quietLink("pr-comments-more", `Show ${all.length - list.length} earlier`, (cx) => { this.expanded.comments = true; cx.notify(); }, c))))
       .children(list.map((m, i) => {
         const body = String(m.body ?? "").replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ").trim();
@@ -639,21 +669,22 @@ export class PullRequest {
               .child(div().text_size(11).text_color(c.dim).child(ago(m.createdAt))))
             .child(div().w_full().text_size(13).line_height(1.45).text_color(c.muted).child(body.length > 280 ? body.slice(0, 280) + "…" : body || "(empty)"))
             .child(h_flex().flex_wrap().gap(6).children(jiraChips(`pr-comment-${i}`, body, c))));
-      }));
+      })));
   }
 
   // The description, as GitHub renders it: Markdown, folded to a few lines when long.
   description(c) {
     const text = cleanBody(this.pr.body), long = longBody(text), open = this.expanded.body;
     const toggle = (cx) => { this.expanded.body = !open; cx.notify(); };
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Description"))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .child(text
         ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
           .when(long && !open, (el) => el.max_h(BODY_FOLD).overflow_hidden())
           .child(TextView.markdown("pr-body-md", linkJira(text)).selectable(true).on_link_click((url) => openUrl(url)))
         : div().text_size(13).text_color(c.dim).child("No description."))
-      .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
+      .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c)))));
   }
 
   // Who and what it carries, in T3 Code's meta rows: a quiet label column, the values, a picker.
@@ -676,12 +707,13 @@ export class PullRequest {
     const reviewed = (pr.latestReviews ?? []).filter((r) => r.author?.login).map((r) => person(r.author.login, outcome[r.state]?.[0] ?? String(r.state).toLowerCase(), outcome[r.state]?.[1]));
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "People", decision))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .child(v_flex().w_full().gap(G.xs)
         .child(metaRow("Assignees", assignees, open ? this.pickerFor("assignees", c) : null,
           open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: Boolean(this.pending) }) : null))
-        .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null)));
+        .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null))));
   }
 
   checksList(c) {
@@ -691,8 +723,9 @@ export class PullRequest {
     const sorted = [...checks].sort((a, b) => order[a.state] - order[b.state]);
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
     const note = [failing.length && `${failing.length} failing`, running.length && `${running.length} running`, passed && `${passed} passed`].filter(Boolean).join(" · ");
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Checks", note))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .children(shown.map((ch, i) => Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer()
         .when(i > 0, (el) => el.border_t(1).border_color(c.border))
         .hover((s) => s.opacity(0.75))
@@ -703,12 +736,13 @@ export class PullRequest {
             .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
           .child(div().text_size(12).text_color(ch.state === "fail" ? c.red : ch.state === "pending" ? c.yellow : c.dim)
             .child(ch.state === "fail" ? "failed" : ch.state === "pending" ? "running" : ch.skipped ? "skipped" : "passed")))))
-      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded.checks = !open; cx.notify(); }, c))));
+      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded.checks = !open; cx.notify(); }, c)))));
   }
 
   discussion(c) {
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Unresolved threads", String(this.threads.length)))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .children(this.threads.map((th, i) => Button.new(`pr-thread-${i}`).w_full().py(8).cursor_pointer()
         .when(i > 0, (el) => el.border_t(1).border_color(c.border))
         .hover((s) => s.opacity(0.75))
@@ -720,7 +754,7 @@ export class PullRequest {
             .child(div().text_size(11).text_color(c.dim).child(`${th.path}${th.line ? `:${th.line}` : ""}`))
             .child(div().text_size(11).text_color(c.dim).child(th.author))
             .when(th.replies > 0, (el) => el.child(div().text_size(11).text_color(c.dim).child(`${th.replies} repl${th.replies > 1 ? "ies" : "y"}`)))
-            .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated")))))));
+            .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated"))))))));
   }
 
   agent(c) {
@@ -729,14 +763,15 @@ export class PullRequest {
     // Fixing code needs a checkout of its repository; explaining reads it from GitHub.
     const here = this.local(pr.url);
     const tasks = cfg().pr.tasks;
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Ask your agent", here ? "in a new tab" : "another repository: explain only"))
-      .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
-        .when(tasks.review, (el) => el.child(quietLink("pr-review", "Code review", () => this.agentTask("review"), c, { size: 13, color: c.text })))
-        .when(tasks.describe, (el) => el.child(quietLink("pr-describe", "Describe change", () => this.agentTask("describe"), c, { size: 13, color: c.text, disabled: !open || !here })))
-        .when(tasks.explain, (el) => el.child(quietLink("pr-explain", "Explain it", () => this.agentTask("explain"), c, { size: 13, color: c.text })))
-        .when(tasks.feedback, (el) => el.child(quietLink("pr-feedback", "Address feedback", () => this.agentTask("feedback"), c, { size: 13, color: c.text, disabled: !open || !here })))
-        .when(tasks.conflicts, (el) => el.child(quietLink("pr-conflicts", "Resolve conflicts", () => this.agentTask("conflicts"), c, { size: 13, color: c.text, disabled: !(open && conflicting && here) }))));
+      .child(v_flex().w_full().px(G.md).py(G.sm)
+      .child(h_flex().w_full().flex_wrap().gap(G.sm).py(G.xs)
+        .when(tasks.review, (el) => el.child(pill("pr-review", "Code review", () => this.agentTask("review"), c)))
+        .when(tasks.describe, (el) => el.child(pill("pr-describe", "Describe change", () => this.agentTask("describe"), c, { disabled: !open || !here })))
+        .when(tasks.explain, (el) => el.child(pill("pr-explain", "Explain it", () => this.agentTask("explain"), c)))
+        .when(tasks.feedback, (el) => el.child(pill("pr-feedback", "Address feedback", () => this.agentTask("feedback"), c, { disabled: !open || !here })))
+        .when(tasks.conflicts, (el) => el.child(pill("pr-conflicts", "Resolve conflicts", () => this.agentTask("conflicts"), c, { disabled: !(open && conflicting && here) })))));
   }
 
   diffView(c, path) {
@@ -772,8 +807,9 @@ export class PullRequest {
   files(c) {
     const pr = this.pr, files = pr.files ?? [], open = this.expanded.files;
     const shown = open ? files : files.slice(0, FILE_ROWS);
-    return v_flex().w_full()
+    return card(c)
       .child(this.section(c, "Files", `${pr.changedFiles} · +${pr.additions} −${pr.deletions}`))
+      .child(v_flex().w_full().px(G.md).py(G.sm)
       .children(shown.map((f, i) => {
         const parts = f.path.split("/"), name = parts.pop(), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
@@ -788,7 +824,7 @@ export class PullRequest {
           .when(on, (el) => el.child(this.diffView(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded.files = !open; cx.notify(); }, c))))
-      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
+      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`))));
   }
 
   render(cx) {
@@ -799,7 +835,7 @@ export class PullRequest {
     if (this.listing && this.openPrs.length) body = this.openPage(c);
     else if (this.pr) {
       const show = cfg().pr.sections, anyTask = Object.values(cfg().pr.tasks).some(Boolean);
-      body = v_flex().w_full().gap(narrow ? 36 : 48)
+      body = v_flex().w_full().gap(narrow ? G.md : G.lg)
         .child(this.hero(c, narrow))
         .when(show.description, (el) => el.child(this.description(c)))
         .when(show.people, (el) => el.child(this.people(c)))
@@ -808,7 +844,7 @@ export class PullRequest {
         .when(show.comments !== false && visible(this.pr.comments).length > 0, (el) => el.child(this.comments(c)))
         .when(show.agent && anyTask, (el) => el.child(this.agent(c)))
         .when(show.files, (el) => el.child(this.files(c)))
-        .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.account ? ` as ${this.account}` : ""}${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every ${cfg().pr.refreshSeconds} s while shown, every 20 s while a check runs.`));
+        .child(div().px(G.xs).text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.account ? ` as ${this.account}` : ""}${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every ${cfg().pr.refreshSeconds} s while shown, every 20 s while a check runs.`));
     } else if (this.outside) body = this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
     else if (this.error) body = this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
     else if (this.none) body = this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,
@@ -818,8 +854,8 @@ export class PullRequest {
 
     return v_flex().id("serhii-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+      .child(h_flex().w_full().justify_center().px(narrow ? G.md : 28).py(narrow ? G.md : 24)
+        .child(v_flex().w_full().max_w(1080).gap(narrow ? G.md : G.xl)
           .child(this.header(c, narrow))
           .child(body)));
   }
