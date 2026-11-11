@@ -4,6 +4,8 @@
 // part that differs is marked; unchanged runs fold away (click to unfold).
 // F7 / Shift+F7 (or ↓ / ↑ in the toolbar) jump between changes, and past
 // the last (first) change on to the next (previous) file of the list.
+// Long lines scroll sideways (trackpad, Shift+wheel, or the bar under the
+// rows); both halves move together and the line numbers stay put.
 // Opened by the Changes panel as a dialog of this mod with props
 // { panel: "diff", root, path, on, fresh, hasHead, status, files: [those, per file] }.
 // With `rev` (a commit, from the Git panel) it compares the commit's first
@@ -14,7 +16,8 @@ import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } fr
 import { exec, readTextFile, watchFolder, theme, settings, openOverlay, closeOverlay, shared, setShared } from "herdr";
 import { insideRoot, ICON } from "./lib.js";
 
-const ROW = 20, CONTEXT = 4, MAX_ROWS = 20000, MAX_LINE = 2000, WHOLE = "toolkit.diffWholeFile";
+// CH: one character of the 12 px monospace font, to size the sideways scroll.
+const ROW = 20, CH = 7.25, NUM = 46, CONTEXT = 4, MAX_ROWS = 20000, MAX_LINE = 2000, WHOLE = "toolkit.diffWholeFile";
 const tidy = (s) => { s = s.replace(/\t/g, "    "); return s.length > MAX_LINE ? s.slice(0, MAX_LINE) + "… (line truncated)" : s; };
 
 // Unified diff lines (git diff -U<all>) → side-by-side rows. A run of removed
@@ -88,7 +91,7 @@ export class Diff {
     this.files = Array.isArray(p.files) && p.files.length ? p.files : [self];
     this.index = this.files.findIndex((f) => f.root === p.root && f.path === p.path);
     if (this.index < 0) { this.files = [self, ...this.files]; this.index = 0; }
-    this.width = 1200; this.whole = Boolean(shared(WHOLE)); this.gone = false;
+    this.width = 1200; this.dx = 0; this.drag = null; this.whole = Boolean(shared(WHOLE)); this.gone = false;
     this.handle = cx.focus_handle(); this.scroll = VirtualListScrollHandle.new();
     this.show(this.index, "first", cx);
     this.ready = true;
@@ -105,7 +108,7 @@ export class Diff {
     this.root = f.root; this.path = f.path; this.on = f.on ?? null;
     this.fresh = Boolean(f.fresh); this.hasHead = f.hasHead !== false; this.status = f.status ?? "M"; this.rev = f.rev ?? null;
     this.rows = []; this.view = []; this.changes = []; this.current = -1; this.open = new Set();
-    this.error = null; this.loading = true; this.limited = false;
+    this.error = null; this.loading = true; this.limited = false; this.dx = 0; this.longest = 0;
     this.load(cx, where);
     this.watch(cx);
     if (this.ready) cx.notify();
@@ -168,6 +171,9 @@ export class Diff {
 
   layout() {
     this.view = visible(this.rows, this.whole, this.open);
+    // The longest line, in characters: how far the text can scroll sideways.
+    this.longest = 0;
+    for (const r of this.rows) this.longest = Math.max(this.longest, r.l?.text.length ?? 0, r.r?.text.length ?? 0);
     // Where each change starts: a changed row after an unchanged one.
     this.changes = [];
     this.view.forEach((r, i) => {
@@ -204,6 +210,31 @@ export class Diff {
     this.goSoon(Math.max(0, this.current), cx);
   }
 
+  // The text width of one half, and how far its longest line overflows it.
+  textWidth() { return Math.max(0, (this.width - 10) / 2 - NUM); }
+  maxDx() { return Math.max(0, Math.ceil(this.longest * CH + 24 - this.textWidth())); }
+
+  scrollX(dx, cx) {
+    dx = Math.max(0, Math.min(Math.round(dx), this.maxDx()));
+    if (dx !== this.dx) { this.dx = dx; cx.notify(); }
+  }
+
+  // A press on the sideways bar: grab the thumb, or jump there and grab it.
+  grab(e, cx) {
+    const max = this.maxDx(), b = e.bounds;
+    if (!max || !b) return;
+    const { thumb, left, track } = this.thumb(b.width, max), x = e.position.x - b.x;
+    const per = max / Math.max(1, track - thumb);
+    if (x < left || x > left + thumb) this.scrollX((x - thumb / 2) * per, cx);
+    this.drag = { x: e.position.x, dx: this.dx, per };
+    cx.stop_propagation();
+  }
+
+  thumb(track, max) {
+    const thumb = Math.max(40, track * this.textWidth() / (this.textWidth() + max));
+    return { track, thumb, left: max ? (this.dx / max) * (track - thumb) : 0 };
+  }
+
   unfold(at, cx) { this.open.add(at); this.layout(); cx.notify(); }
 
   openWith() {
@@ -217,13 +248,14 @@ export class Diff {
     const empty = !cell, changed = kind !== "same";
     return h_flex().flex_1().min_w(0).h(ROW).overflow_hidden()
       .when(changed && !empty, (e) => e.bg(tint + "78")).when(changed && empty, (e) => e.bg(t.raised))
-      .child(div().w(46).flex_none().pr(8).text_right().text_color(changed && !empty ? tint : t.dim).child(cell ? String(cell.n) : ""))
-      .child(!cell ? div() : parts
-        ? h_flex().flex_1().min_w(0).overflow_hidden()
+      .child(div().w(NUM).flex_none().pr(8).text_right().text_color(changed && !empty ? tint : t.dim).child(cell ? String(cell.n) : ""))
+      // The text, shifted left by the sideways scroll and clipped to its half.
+      .child(h_flex().flex_1().min_w(0).h_full().overflow_hidden().when(Boolean(cell), (e) => e.child(parts
+        ? h_flex().flex_none().ml(-this.dx)
           .child(div().flex_none().whitespace_nowrap().child(parts[0]))
           .child(div().flex_none().whitespace_nowrap().rounded(2).bg(tint + "c8").child(parts[1]))
           .child(div().flex_none().whitespace_nowrap().child(parts[2]))
-        : div().flex_1().min_w(0).whitespace_nowrap().truncate().child(cell.text));
+        : div().flex_none().ml(-this.dx).whitespace_nowrap().child(cell.text))));
   }
 
   row(r, i, t) {
@@ -251,9 +283,14 @@ export class Diff {
       .when(on, (e) => e.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => action(cx))).child(label);
     const icon = (id, file, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => action(cx)).child(svg(`${ICON}${file}.svg`).size(14));
-    const n = this.changes.length, many = this.files.length > 1;
+    const n = this.changes.length, many = this.files.length > 1, maxDx = this.maxDx();
+    if (this.dx > maxDx) this.dx = maxDx;
+    const bar = maxDx ? this.thumb(this.width - 12, maxDx) : null;
     // A virtual list takes its width from its first row, so rows get the dialog's width.
     return v_flex().id("diff").size_full().min_h(0).on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } }).bg(t.background).text_color(t.foreground).text_size(13).track_focus(this.handle)
+      // Dragging the sideways bar: the move and release can land anywhere in the dialog.
+      .on_mouse_move((e, cx) => { if (this.drag) this.scrollX(this.drag.dx + (e.position.x - this.drag.x) * this.drag.per, cx); })
+      .on_mouse_up("left", () => { this.drag = null; })
       .on_key_down((e, cx) => {
         if (e.keystroke === "f7" || e.keystroke === "alt-down") { this.go(this.current + 1, true, cx); cx.stop_propagation(); }
         else if (e.keystroke === "shift-f7" || e.keystroke === "alt-up") { this.go(this.current - 1, true, cx); cx.stop_propagation(); }
@@ -279,12 +316,17 @@ export class Diff {
         .child(div().flex_1().min_w(0).pl(54).truncate().child(this.status === "D" ? "(deleted)" : this.rev ?? "Working tree")))
       .child(this.error || (this.loading && !this.rows.length)
         ? div().p(16).text_color(t.dim).child(this.error ?? "Reading…")
-        : div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(12)
+        : div().id("diff-body").flex_1().min_h(0).relative()
+          .on_scroll_wheel((e, cx) => { if (e.delta.x) this.scrollX(this.dx - e.delta.x, cx); })
+          .font_family(settings().font_family ?? "JetBrains Mono").text_size(12)
           .child(v_virtual_list("diff-rows", this.view.length, ROW, (i) => String(i),
             (range) => this.view.slice(range.start, range.end).map((r, k) => this.row(r, range.start + k, t))).track_scroll(this.scroll).size_full()
             // A fold unfolds on a click; handlers inside a virtual list's renderer throw, so it is the list's.
             .on_item_click((k, cx) => { const r = this.view[Number(k)]; if (r?.kind === "fold" && !r.hidden) this.unfold(r.at, cx); }))
-          .child(Scrollbar.vertical("diff-rows").viewport_from_layout().absolute().inset_0()))
+          .child(Scrollbar.vertical("diff-rows").viewport_from_layout().absolute().inset_0())
+          .when(Boolean(bar), (e) => e.child(div().id("diff-hbar").absolute().left(0).bottom(0).w(bar.track).h(10).cursor_pointer()
+            .on_mouse_down("left", (ev, cx) => this.grab(ev, cx))
+            .child(div().absolute().top(3).left(bar.left).w(bar.thumb).h(4).rounded(2).bg(this.drag ? t.muted : t.dim)))))
       .when(Boolean(this.limited), (e) => e.child(div().px(12).py(4).text_size(11).text_color(t.dim).border_t(1).border_color(t.border)
         .child(`Showing the first ${MAX_ROWS.toLocaleString()} lines of the diff`)));
   }
