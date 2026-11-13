@@ -2,10 +2,10 @@
 // its local branches (the checked-out one first, with ↑ahead ↓behind its
 // upstream) and the commit graph (`git log --graph`) with branch and tag
 // labels, each on its own tab (Graph · Branches · Worktrees). Click a branch
-// to find its tip in the graph; click another
+// to find its tip in the graph, or hover it to delete it; click another
 // worktree to open a tab there; click a commit to list its files, and a
 // file to compare it with the commit's parent side by side (diff.js).
-// Reads git only; it never checks anything out.
+// Never checks anything out or fetches; deleting a branch is its only write.
 // New for herdr-toolkit.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
@@ -107,7 +107,7 @@ export class Git {
     this.stale = false;
     if (this.loading) { this.again = true; return; }
     const { cwd, on } = location(), context = key();
-    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; this.toTop = true; }
+    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; this.toTop = true; this.del = null; this.deleted = null; }
     if (!cwd) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -222,6 +222,44 @@ export class Git {
     run("tab.new", { name: path.split("/").pop(), space, folder: path });
   }
 
+  // Deletes a local branch: `git branch -d`, which refuses one with commits
+  // that aren't merged; `force` (-D) deletes it anyway. this.del is the row
+  // asking: { name, state: "ask" | "busy" | "unmerged" | "error", error }.
+  deleteBranch(name, force, cx) {
+    const root = this.root, context = this.context, on = location().on;
+    this.del = { name, state: "busy" };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = await exec("git", ["branch", force ? "-D" : "-d", name], { cwd: root, on }).catch((e) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) }));
+      if (this.context !== context || this.del?.name !== name) return;
+      if (r.code === 0) {
+        // "Deleted branch x (was 1a2b3c4)." — the tip, for Undo.
+        const sha = /\(was ([0-9a-f]+)\)/.exec(r.stdout)?.[1];
+        this.del = null;
+        this.deleted = sha ? { name, sha } : null;
+        this.branches = this.branches.filter((b) => b.name !== name);
+        this.refresh(cx);
+      } else {
+        const err = (r.stderr || r.stdout || "git branch failed").trim();
+        this.del = !force && /not fully merged/.test(err) ? { name, state: "unmerged" } : { name, state: "error", error: err.split("\n")[0].replace(/^error: /, "") };
+      }
+      cx.notify();
+    });
+  }
+
+  undoDelete(cx) {
+    const d = this.deleted, root = this.root, context = this.context, on = location().on;
+    if (!d) return;
+    this.deleted = null;
+    cx.spawn(async (cx) => {
+      const r = await exec("git", ["branch", d.name, d.sha], { cwd: root, on }).catch(() => ({ code: 1 }));
+      if (this.context !== context) return;
+      if (r.code !== 0) this.deleted = { ...d, failed: true };
+      this.refresh(cx);
+      cx.notify();
+    });
+  }
+
   short(path) {
     const h = home();
     return !location().on && path.startsWith(h + "/") ? "~" + path.slice(h.length) : path;
@@ -322,17 +360,53 @@ export class Git {
       .child(div().flex_none().text_size(10.5).text_color(t.dim).child(r.when.replace(/ ago$/, "")));
   }
 
+  // A small bordered button inside a row: its press doesn't reach the row.
+  rowButton(id, label, color, action, t) {
+    return div().id(id).h(22).px(8).flex_none().flex().items_center().rounded(5).text_size(11.5).cursor_pointer()
+      .border_1().border_color(color ?? t.border).text_color(color ?? t.muted).hover((s) => s.bg(t.hover))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); action(cx); })
+      .child(label);
+  }
+
+  // The row of a branch being deleted: asks, then says what went wrong.
+  deleteRow(b, t) {
+    const d = this.del, red = t.ansi1;
+    const message = d.state === "ask" ? `Delete ${b.name}?`
+      : d.state === "busy" ? `Deleting ${b.name}…`
+      : d.state === "unmerged" ? `${b.name} isn't merged into ${b.upstream || this.branch || "HEAD"}: its unmerged commits go with it`
+      : d.error;
+    const cancel = (cx) => { this.del = null; cx.notify(); };
+    return h_flex().id(`git-branch-${b.name}`).min_h(32).flex_none().px(10).py(5).gap(8).items_center().rounded(6).bg(red + "16")
+      .child(div().flex_1().min_w(0).text_size(12).text_color(d.state === "error" ? red : t.foreground).child(message))
+      .when(d.state === "ask", (e) => e.child(this.rowButton(`git-del-yes-${b.name}`, "Delete", red, (cx) => this.deleteBranch(b.name, false, cx), t)))
+      .when(d.state === "unmerged", (e) => e.child(this.rowButton(`git-del-force-${b.name}`, "Delete anyway", red, (cx) => this.deleteBranch(b.name, true, cx), t)))
+      .when(d.state !== "busy", (e) => e.child(this.rowButton(`git-del-no-${b.name}`, d.state === "error" ? "OK" : "Cancel", null, cancel, t)));
+  }
+
   branchRow(b, t) {
+    if (this.del?.name === b.name) return this.deleteRow(b, t);
     const status = [b.ahead ? `↑${b.ahead}` : "", b.behind ? `↓${b.behind}` : "", b.gone ? "gone" : ""].filter(Boolean).join(" ");
+    // git won't delete a branch that is checked out, here or in another worktree.
+    const deletable = !b.current && !b.worktree;
     return h_flex().id(`git-branch-${b.name}`).h(32).flex_none().px(10).gap(8).items_center().rounded(6).cursor_pointer()
       .when(b.current, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
+      .on_hover((hovered, cx) => {
+        if (hovered) this.hovered = b.name; else if (this.hovered === b.name) this.hovered = null; else return;
+        cx.notify();
+      })
       .tooltip([b.name, b.upstream ? `tracks ${b.upstream}` : "no upstream", b.worktree ? `checked out in ${this.short(b.worktree)}` : "", b.when].filter(Boolean).join("\n"))
       .on_click((_e, cx) => this.reveal(b.name, cx))
       .child(div().w(10).flex_none().text_color(b.current ? t.accent : t.dim).child(b.current ? "●" : b.worktree ? "◐" : "○"))
       .child(div().min_w(0).flex_shrink(1).truncate().when(b.current, (e) => e.font_semibold()).child(b.name))
       .child(div().flex_1())
       .when(Boolean(status), (e) => e.child(div().flex_none().text_size(11).text_color(b.gone ? t.ansi1 : t.accent).child(status)))
-      .child(div().flex_none().text_size(10.5).text_color(t.dim).child(b.when.replace(/ ago$/, "")));
+      .child(div().flex_none().text_size(10.5).text_color(t.dim).child(b.when.replace(/ ago$/, "")))
+      .when(deletable && this.hovered === b.name, (e) => e.child(div().id(`git-del-${b.name}`).p(3).flex_none().rounded(5).cursor_pointer()
+        .text_color(t.muted).hover((s) => s.bg(t.ansi1 + "26").text_color(t.ansi1)).tooltip("Delete this branch")
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { cx.stop_propagation(); this.del = { name: b.name, state: "ask" }; cx.notify(); })
+        .child(svg(`${ICON}trash.svg`).size(13))));
   }
 
   worktreeRow(w, t) {
@@ -387,7 +461,13 @@ export class Git {
         .child(div().min_w(0).truncate().child(this.fork.subject))))
       .when(Boolean(this.commit), (e) => e.child(this.commitView(t)));
     const branches = () => v_flex().id("git-branches").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)
-      .child(div().px(8).pb(4).text_size(11).text_color(t.dim).child("Newest first. ● checked out · ◐ in another worktree · click: show in the graph"))
+      .child(div().px(8).pb(4).text_size(11).text_color(t.dim).child("Newest first. ● checked out · ◐ in another worktree · click: show in the graph · hover: delete"))
+      .when(Boolean(this.deleted), (e) => e.child(h_flex().min_h(30).flex_none().mx(2).mb(4).px(10).py(4).gap(8).items_center().rounded(6).border_1().border_color(t.border).bg(t.raised)
+        .child(div().flex_1().min_w(0).text_size(12).text_color(this.deleted.failed ? t.ansi1 : t.muted)
+          .child(this.deleted.failed ? `Couldn't restore ${this.deleted.name}: it pointed at ${this.deleted.sha}` : `Deleted ${this.deleted.name} (was ${this.deleted.sha})`))
+        .when(!this.deleted.failed, (e) => e.child(this.rowButton("git-del-undo", "Undo", t.accent, (cx) => this.undoDelete(cx), t)))
+        .child(div().id("git-del-dismiss").p(3).flex_none().rounded(5).cursor_pointer().text_color(t.dim).hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => { this.deleted = null; cx.notify(); }).child(svg(`${ICON}close.svg`).size(12)))))
       .children(this.branches.map((b) => this.branchRow(b, t)))
       .when(!this.branches.length, (e) => e.child(empty("No local branches")));
     const worktrees = () => v_flex().id("git-worktrees").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2)

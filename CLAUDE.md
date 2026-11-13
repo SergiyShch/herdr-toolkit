@@ -70,7 +70,12 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - `log --format=%x01%h%x00%D…`: `\x01` splits the graph prefix from the fields. `parseGraph` / `parseRefs` / `parseWorktrees` are exported and pure, for Node tests.
 - Tabs (`this.tab`, shared `toolkit.gitTab`): Graph · Branches · Worktrees (the last only with more than one). `reveal()` switches to Graph and scrolls a frame later. The commit card takes up to 45% of the panel's height (`on_size_change`).
 - Graph scopes (`this.scope`, shared `toolkit.gitScope`; the old value `current` reads as `head`): `all` (`--branches --remotes --tags HEAD`), `head` (`HEAD`), `branch` (`origin/<base>..HEAD`, base from `defaultBranch`, cached 5 min). `own` = `rev-list origin/<base>..HEAD` (full hashes, matched against `%H`) tints those rows; the fork point is `merge-base HEAD origin/<base>`.
-- Read-only on purpose: no checkout or fetch from the panel.
+- No checkout or fetch from the panel. Its one write is **deleting a local branch** (Branches tab):
+  - The bin shows on hover (`on_hover` → `this.hovered`), not on the current branch or one in another worktree.
+  - `this.del` = `{ name, state: "ask" | "busy" | "unmerged" | "error" }` swaps the row for `deleteRow`. It runs `git branch -d`; stderr `not fully merged` offers "Delete anyway" (force).
+  - Success parses `(was <sha>)` into `this.deleted` for **Undo** (`git branch <name> <sha>`). Both reset on a context change.
+  - Buttons inside a row stop the press on `on_mouse_down` and in `on_click`, or the row's own click (reveal in the graph) fires too.
+  - The Claude Code git-guardrails hook blocks any shell command containing the force-delete flag, even in scratch repos and doc edits: test the `-d` path, edit docs with the Edit tool.
 - A click on a commit: `git show --format= --no-renames --diff-merges=first-parent` with `--name-status -z` and `--numstat -z` (`parseCommitFiles`), listed under the graph. A file opens `diff.js` with `rev`: it diffs with `git show -U1000000 <rev> -- path` (works for root commits; merges against the first parent) and doesn't watch.
 - The Node stub for `herdr` also needs `appHome` and `writeTextFile` (config.js imports them).
 

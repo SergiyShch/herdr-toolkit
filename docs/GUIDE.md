@@ -134,12 +134,14 @@ Which account reads a repository, in order: its pin (`github.repos`, settings �
 
 ### Git
 
-The repository of the pane you're in, at a glance. It only reads git: it never checks out, fetches or changes anything.
+The repository of the pane you're in, at a glance. It never checks out or fetches; the one thing it changes is deleting a branch you ask it to.
 
 - **The checked-out branch** sits in the header (or `detached`).
 - Three tabs under it, each with the panel's full height: **Graph**, **Branches** (with a count) and **Worktrees** (only when there is more than one). The tab you used last is remembered.
 - **Worktrees** (when there is more than one): each with its branch and folder; the pane's own is highlighted. Click another to open a new tab in it.
 - **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to switch to the graph with its tip marked.
+  - **Delete a branch**: hover it and click the bin, then **Delete**. That is `git branch -d`, so a branch with commits that aren't merged (into its upstream, else the checked-out branch) asks again: **Delete anyway** (`-D`) drops them with it. The checked-out branch and those checked out in another worktree have no bin. Only the local branch goes; its remote one stays.
+  - After a delete, a line on top says where it pointed (`was 1a2b3c4`), with **Undo** to bring it back.
 - **Graph**: `git log --graph` with a label per branch (the checked-out one is `● name`, remote ones blue, tags yellow). Hover a commit for its author and full subject. Three scopes:
   - **All branches**: every local and remote branch and tag, so forks and merges show as lines.
   - **This branch**: the checked-out branch's whole history, including what it inherited from its base.
