@@ -5,7 +5,7 @@
 // layout.select and shows or hides the `panel` column. A hidden panel stays
 // alive, so each one checks `isShown(id)` before it reads git or GitHub.
 // Modified for herdr-toolkit: gh runs as a per-repository or per-space account
-// (ghAccount, accountPicker), and Create PR pushes as that account.
+// (ghAccount, accountPicker), and Create PR pushes (and the Git panel fetches, remoteGit) as that account.
 import { div, svg } from "gpui-kit";
 import { EditorState, TextView, Button, Popover, v_flex, h_flex } from "gpui-base";
 import { spaces, panes, focused, layout, run, theme, settings, exec, knownAgents, notify, shared, setShared, openOverlay } from "herdr";
@@ -268,6 +268,15 @@ const GIT_NO_PROMPT = 'GIT_TERMINAL_PROMPT=0 exec git "$@"';
 const GIT_AS = 'u=$1; shift; t=$(gh auth token -u "$u" 2>/dev/null) || { echo "gh has no login for $u (gh auth login)" >&2; exit 97; }; '
   + 'GH_TOKEN=$t GIT_TERMINAL_PROMPT=0 exec git -c credential.helper= -c "credential.helper=!gh auth git-credential" "$@"';
 const PR_EXISTS = /already exists[^\n]*\n?\s*(https:\/\/\S+)/i;
+
+// git that talks to a remote (fetch): never prompts, and for an https origin
+// runs as the space's or repository's gh account, as Create PR's push does.
+export async function remoteGit(root, on, args, timeout = 300_000) {
+  const url = (await exec("git", ["remote", "get-url", "origin"], { cwd: root, on }).catch(() => null))?.stdout?.trim() ?? "";
+  const account = /^https:\/\//i.test(url) ? (await ghAccount(root, on).catch(() => null))?.account : null;
+  const how = account ? [GIT_AS, "sh", account] : [GIT_NO_PROMPT, "sh"];
+  return exec("sh", ["-c", ...how, ...args], { cwd: root, on, timeout });
+}
 
 // The remote's default branch (origin/HEAD), else main or master if origin has one.
 export async function defaultBranch(root, on) {

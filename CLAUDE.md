@@ -70,7 +70,14 @@ User docs live in `docs/GUIDE.md`. Its §11 "How it is built" covers the file ma
 - `log --format=%x01%h%x00%D…`: `\x01` splits the graph prefix from the fields. `parseGraph` / `parseRefs` / `parseWorktrees` are exported and pure, for Node tests.
 - Tabs (`this.tab`, shared `toolkit.gitTab`): Graph · Branches · Worktrees (the last only with more than one). `reveal()` switches to Graph and scrolls a frame later. The commit card takes up to 45% of the panel's height (`on_size_change`).
 - Graph scopes (`this.scope`, shared `toolkit.gitScope`; the old value `current` reads as `head`): `all` (`--branches --remotes --tags HEAD`), `head` (`HEAD`), `branch` (`origin/<base>..HEAD`, base from `defaultBranch`, cached 5 min). `own` = `rev-list origin/<base>..HEAD` (full hashes, matched against `%H`) tints those rows; the fork point is `merge-base HEAD origin/<base>`.
-- No checkout or fetch from the panel. Its one write is **deleting a local branch** (Branches tab):
+- No checkout, merge or rebase from the panel. It writes in three places: **Fetch**, **Pull all** and **deleting a local branch**.
+- **Fetch / Pull all** (header, `sync(pull)`; `this.syncing` blocks a second run; the result is `this.note` `{ title, lines, error }` under the header):
+  - Fetch is `remoteGit(root, on, ["fetch", "--all", "--prune"])` (`lib.js`): `GIT_TERMINAL_PROMPT=0`, as the gh account for an https origin (`GIT_AS`), 5 min timeout.
+  - Pull all then reads `PULL_REFS` (`for-each-ref` name, upstream, track, worktreepath) and runs `planPull()` (pure, exported): `ff` / `diverged` / `gone` / `none` / `even`.
+  - An `ff` branch with a worktree path gets `merge --ff-only <upstream>` there; one without gets `fetch . <upstream>:refs/heads/<name>`. Others are only listed.
+  - `why(r)` picks git's `fatal:`/`error:` line, plus the next line when it ends with `:` (the file names).
+  - Tested in Node against a local bare origin: a branch checked out here, one in another worktree, one free, a diverged one, a pruned one, and one blocked by an untracked file.
+- **Deleting a local branch** (Branches tab):
   - The bin shows on hover (`on_hover` → `this.hovered`), not on the current branch or one in another worktree.
   - `this.del` = `{ name, state: "ask" | "busy" | "unmerged" | "error" }` swaps the row for `deleteRow`. It runs `git branch -d`; stderr `not fully merged` offers "Delete anyway" (force).
   - Success parses `(was <sha>)` into `this.deleted` for **Undo** (`git branch <name> <sha>`). Both reset on a context change.

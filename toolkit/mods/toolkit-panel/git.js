@@ -5,12 +5,13 @@
 // to find its tip in the graph, or hover it to delete it; click another
 // worktree to open a tab there; click a commit to list its files, and a
 // file to compare it with the commit's parent side by side (diff.js).
-// Never checks anything out or fetches; deleting a branch is its only write.
+// Fetch and Pull all (fast-forwards only) sit in the header. It never checks
+// out, merges or rebases; Fetch, Pull all and deleting a branch are its writes.
 // New for herdr-toolkit.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { exec, watchFolder, theme, settings, home, run, spaces, shared, setShared, openOverlay } from "herdr";
-import { location, key, isShown, cfg, insideRoot, defaultBranch, ICON } from "./lib.js";
+import { location, key, isShown, cfg, insideRoot, defaultBranch, remoteGit, ICON } from "./lib.js";
 
 const ROW = 22, LIST = 26, SCOPE = "toolkit.gitScope", TAB = "toolkit.gitTab";
 // Graph columns take the terminal's hues in turn.
@@ -74,6 +75,29 @@ export function parseCommitFiles(names, nums) {
   return out;
 }
 
+// Pull all's view of the local branches: PULL_REFS lines → { name, upstream,
+// worktree, behind, action }, action being "ff" (only behind: it can move
+// forward), "diverged" (ahead and behind), "gone" (upstream deleted), "none"
+// (no upstream) or "even" (nothing to take).
+const PULL_REFS = ["for-each-ref", "--format=%(refname:short)%00%(upstream)%00%(upstream:track,nobracket)%00%(worktreepath)", "refs/heads"];
+export function planPull(stdout) {
+  return stdout.split("\n").filter(Boolean).map((line) => {
+    const [name, upstream, track = "", worktree] = line.split("\0");
+    const ahead = Number(/ahead (\d+)/.exec(track)?.[1] ?? 0), behind = Number(/behind (\d+)/.exec(track)?.[1] ?? 0);
+    const action = !upstream ? "none" : track === "gone" ? "gone" : ahead && behind ? "diverged" : behind ? "ff" : "even";
+    return { name, upstream, worktree: worktree || "", behind, action };
+  });
+}
+// The line of git's output that says what went wrong.
+const why = (r) => {
+  const lines = `${r.stderr ?? ""}\n${r.stdout ?? ""}`.split("\n").map((l) => l.trim()).filter(Boolean);
+  const at = Math.max(0, lines.findIndex((l) => /^(fatal|error):/.test(l)));
+  const line = (lines[at] ?? "failed").replace(/^(fatal|error): /, "");
+  // "…would be overwritten by merge:" names the files on the next lines.
+  return line.endsWith(":") && lines[at + 1] ? `${line} ${lines[at + 1]}` : line;
+};
+const few = (names) => names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", ");
+
 // Each repository's base (origin's default branch), asked again after 5 min.
 const BASES = new Map(), BASE_MS = 5 * 60000;
 async function baseOf(root, on) {
@@ -107,7 +131,7 @@ export class Git {
     this.stale = false;
     if (this.loading) { this.again = true; return; }
     const { cwd, on } = location(), context = key();
-    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; this.toTop = true; this.del = null; this.deleted = null; }
+    if (context !== this.context) { this.context = context; this.root = null; this.rows = []; this.worktrees = []; this.branches = []; this.error = null; this.watched = null; this.commit = null; this.toTop = true; this.del = null; this.deleted = null; this.note = null; }
     if (!cwd) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -258,6 +282,68 @@ export class Git {
       this.refresh(cx);
       cx.notify();
     });
+  }
+
+  // Fetch: `git fetch --all --prune`. Pull all: that, then every local branch
+  // that is only behind its upstream moves forward to it (pullAll). The result
+  // is this.note: { title, lines, error }, shown under the header.
+  sync(pull, cx) {
+    if (this.syncing || !this.root) return;
+    const root = this.root, context = this.context, on = location().on;
+    this.syncing = pull ? "pull" : "fetch"; this.note = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      let note;
+      try {
+        const remotes = await exec("git", ["remote"], { cwd: root, on });
+        if (remotes.code !== 0 || !remotes.stdout.trim()) note = { title: "This repository has no remotes to fetch from", lines: [], error: true };
+        else {
+          const f = await remoteGit(root, on, ["fetch", "--all", "--prune"]);
+          if (f.code !== 0) note = { title: `Fetch failed: ${why(f)}`, lines: [], error: true };
+          else {
+            const refs = await exec("git", PULL_REFS, { cwd: root, on });
+            const plan = refs.code === 0 ? planPull(refs.stdout) : [];
+            note = pull ? await this.pullAll(root, on, plan) : this.fetchNote(plan);
+          }
+        }
+      } catch (e) { note = { title: String(e?.message ?? e), lines: [], error: true }; }
+      this.syncing = null;
+      if (this.context === context) { this.note = note; this.refresh(cx); }
+      cx.notify();
+    });
+  }
+
+  fetchNote(plan) {
+    const behind = plan.filter((b) => b.action === "ff" || b.action === "diverged");
+    return behind.length
+      ? { title: `Fetched · ${behind.length} branch${behind.length === 1 ? " is" : "es are"} behind`, lines: [few(behind.map((b) => `${b.name} ↓${b.behind}`))] }
+      : { title: "Fetched · no branch is behind its upstream", lines: [] };
+  }
+
+  // No merges, so nothing can conflict: a branch checked out somewhere gets
+  // `merge --ff-only` in that worktree (git stops, changing nothing, if local
+  // edits are in the way); the others `fetch . upstream:branch`, which only
+  // moves forward. Diverged and upstream-gone branches are listed, not touched.
+  async pullAll(root, on, plan) {
+    const updated = [], failed = [];
+    for (const b of plan.filter((p) => p.action === "ff")) {
+      const r = b.worktree
+        ? await exec("git", ["merge", "--ff-only", "--quiet", b.upstream], { cwd: b.worktree, on, timeout: 120_000 }).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }))
+        : await exec("git", ["fetch", "--quiet", ".", `${b.upstream}:refs/heads/${b.name}`], { cwd: root, on }).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+      if (r.code === 0) updated.push(`${b.name} ↓${b.behind}`); else failed.push(`${b.name}: ${why(r)}`);
+    }
+    const diverged = plan.filter((b) => b.action === "diverged").map((b) => b.name);
+    const gone = plan.filter((b) => b.action === "gone").map((b) => b.name);
+    const n = updated.length;
+    return {
+      title: n ? `Pulled ${n} branch${n === 1 ? "" : "es"}: ${few(updated)}` : failed.length ? "Pulled nothing" : "Fetched · every branch with an upstream is up to date",
+      lines: [
+        ...failed.map((f) => `Couldn't update ${f}`),
+        ...(diverged.length ? [`Diverged, left as is (merge or rebase them yourself): ${few(diverged)}`] : []),
+        ...(gone.length ? [`Upstream deleted: ${few(gone)}`] : []),
+      ],
+      error: failed.length > 0,
+    };
   }
 
   short(path) {
@@ -441,6 +527,17 @@ export class Git {
           .when(count !== null, (e) => e.child(div().px(5).h(16).flex().items_center().rounded(8).bg(t.raised).text_size(10).text_color(t.dim).child(String(count)))));
     };
     const empty = (text) => div().px(14).py(12).text_size(12).text_color(t.dim).child(text);
+    // Fetch and Pull all: labelled when the panel is wide enough, icons otherwise.
+    const wide = this.width >= 440;
+    const syncButton = (pull, icon, label, tip) => {
+      const busy = this.syncing === (pull ? "pull" : "fetch");
+      return h_flex().id(`git-${icon}`).h(24).px(wide ? 8 : 5).gap(5).flex_none().items_center().rounded(6).border_1().border_color(t.border)
+        .text_size(12).text_color(this.syncing && !busy ? t.dim : t.muted).tooltip(tip)
+        .when(!this.syncing, (e) => e.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.sync(pull, cx)))
+        .when(busy, (e) => e.loop("opacity", { from: 0.35, to: 1, period: 1200 }))
+        .child(svg(`${ICON}${icon}.svg`).size(13))
+        .when(wide, (e) => e.child(busy ? (pull ? "Pulling…" : "Fetching…") : label));
+    };
     const graph = () => v_flex().flex_1().min_h(0)
       .child(h_flex().h(36).flex_none().px(14).gap(6).items_center().border_b(1).border_color(t.border)
         .child(chip("git-scope-all", "All branches", this.scope === "all", (cx) => this.setScope("all", cx)))
@@ -485,8 +582,18 @@ export class Git {
           .tooltip(this.branch ? `Checked out: ${this.branch}` : "HEAD is detached")
           .child(svg(`${ICON}branch.svg`).size(12).text_color(t.accent))
           .child(div().max_w(180).truncate().text_size(12).child(this.branch || "detached"))))
+        .when(Boolean(this.root), (e) => e
+          .child(syncButton(false, "fetch", "Fetch", "git fetch --all --prune: every remote, without touching your branches"))
+          .child(syncButton(true, "pull", "Pull all", "Fetch, then move every local branch that is only behind its upstream forward to it.\nDiverged branches are left alone.")))
         .child(div().id("git-refresh").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Read again")
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.refresh(cx)).child(svg(`${ICON}refresh.svg`).size(14))))
+      .when(Boolean(this.note), (e) => e.child(h_flex().flex_none().px(14).py(6).gap(8).items_start().border_b(1).border_color(t.border)
+        .bg(this.note.error ? t.ansi1 + "14" : t.raised)
+        .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(div().text_size(12).text_color(this.note.error ? t.ansi1 : t.foreground).child(this.note.title))
+          .children(this.note.lines.map((l) => div().text_size(11.5).text_color(t.dim).child(l))))
+        .child(div().id("git-note-close").p(3).flex_none().rounded(5).cursor_pointer().text_color(t.dim).hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => { this.note = null; cx.notify(); }).child(svg(`${ICON}close.svg`).size(12)))))
       .when(!this.root, (e) => e.child(empty(this.error ?? (this.loading ? "Reading…" : "No folder"))))
       .when(Boolean(this.root), (e) => e
         .child(h_flex().h(36).flex_none().px(4).items_end().border_b(1).border_color(t.border).bg(t.chrome ?? t.background)

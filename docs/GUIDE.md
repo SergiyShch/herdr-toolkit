@@ -134,9 +134,17 @@ Which account reads a repository, in order: its pin (`github.repos`, settings �
 
 ### Git
 
-The repository of the pane you're in, at a glance. It never checks out or fetches; the one thing it changes is deleting a branch you ask it to.
+The repository of the pane you're in, at a glance. It never checks out a branch or merges anything for you. It changes things only when you click **Fetch**, **Pull all** or a branch's delete button.
 
 - **The checked-out branch** sits in the header (or `detached`).
+- **Fetch** (header): `git fetch --all --prune`. Every remote, with deleted remote branches pruned. Your branches stay where they are; a line under the header says which ones are now behind.
+- **Pull all** (header): fetches, then moves every local branch that is only behind its upstream (`↓3`, no `↑`) forward to it. There is no merge, so nothing can conflict:
+  - The checked-out branch, here or in another worktree, is fast-forwarded in that folder (`git merge --ff-only`). If your uncommitted changes touch the incoming files, git stops and changes nothing for that branch.
+  - The others move without being checked out.
+  - Branches that have **diverged** (`↑2 ↓3`) are left for you to merge or rebase, and ones whose upstream was deleted are listed. Branches without an upstream are skipped.
+  - The line under the header lists what was pulled and what wasn't; × closes it.
+- For an `https` origin, both run as the repository's or space's GitHub account (as Create PR does). Neither ever waits for a password prompt: they fail and say why.
+- In a narrow panel the two buttons show only their icons; hover for what they do.
 - Three tabs under it, each with the panel's full height: **Graph**, **Branches** (with a count) and **Worktrees** (only when there is more than one). The tab you used last is remembered.
 - **Worktrees** (when there is more than one): each with its branch and folder; the pane's own is highlighted. Click another to open a new tab in it.
 - **Branches**: local branches, newest first, the checked-out one on top (●). `◐` marks a branch checked out in another worktree. `↑2 ↓1` is how far it is ahead of and behind its upstream; `gone` means its upstream was deleted. Click a branch to switch to the graph with its tip marked.
